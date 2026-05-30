@@ -1,0 +1,9 @@
+{
+  "shell": "powershell.exe",
+  "shellArgs": ["-NoLogo", "-NoExit", "-Command", "claude"],
+  "cwd": "",
+  "fontFamily": "Cascadia Mono, Consolas, \"Courier New\", monospace",
+  "fontSize": 14,
+  "scrollback": 10000,
+  "copyOnSelect": false
+}

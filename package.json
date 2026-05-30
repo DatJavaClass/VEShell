@@ -1,0 +1,78 @@
+{
+  "name": "veshell",
+  "productName": "VEShell",
+  "version": "1.0.0",
+  "description": "A reliable terminal wrapper for PowerShell + Claude Code with rock-solid mouse/keyboard cut, copy, and paste.",
+  "author": "victorycomputersystems@gmail.com",
+  "license": "GPL-3.0-or-later",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "patch-build": "node scripts/patch-node-gyp.js && node scripts/patch-winpty.js",
+    "rebuild": "npm run patch-build && electron-rebuild -f -w node-pty",
+    "postinstall": "node scripts/postinstall.js",
+    "test": "npm run test:chain && npm run test:e2e && npm run test:stress",
+    "test:chain": "tests\\run-chain.cmd",
+    "test:e2e": "tests\\run-e2e.cmd",
+    "test:stress": "tests\\run-stress.cmd",
+    "pack:dir": "electron-builder --dir",
+    "pack:portable": "electron-builder --win portable",
+    "pack:installer": "electron-builder --win nsis",
+    "dist": "electron-builder --win nsis portable"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "node-pty": "^1.0.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.victorycomputersystems.veshell",
+    "productName": "VEShell",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*",
+      "package.json",
+      "config.json",
+      "!node_modules/node-pty/build/Release/*.{pdb,iobj,ipdb,exp,lib}",
+      "!node_modules/node-pty/build/Release/obj/**",
+      "!**/*.tmp.*",
+      "!src/**/*.tmp.*"
+    ],
+    "asarUnpack": [
+      "node_modules/node-pty/**/*"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "VEShell",
+      "runAfterFinish": true,
+      "artifactName": "VEShell-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "VEShell-Portable-${version}.${ext}"
+    }
+  }
+}

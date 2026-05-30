@@ -1,0 +1,119 @@
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #1e1e1e;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+#terminal {
+  position: absolute;
+  inset: 0;
+  padding: 6px 4px 4px 8px;
+}
+
+/* xterm fills the container */
+.xterm { height: 100%; }
+.xterm-viewport::-webkit-scrollbar { width: 12px; }
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: #4a4a4a;
+  border-radius: 6px;
+}
+.xterm-viewport::-webkit-scrollbar-track { background: #1e1e1e; }
+
+/* ---- Context menu ---- */
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 190px;
+  padding: 5px;
+  background: #2b2b2b;
+  border: 1px solid #3c3c3c;
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+  font-size: 13px;
+  color: #e6e6e6;
+  user-select: none;
+}
+.ctx-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 5px;
+  cursor: default;
+  white-space: nowrap;
+}
+.ctx-item:hover { background: #094771; }
+.ctx-item.disabled {
+  color: #6b6b6b;
+  pointer-events: none;
+}
+.ctx-key {
+  margin-left: 24px;
+  color: #9a9a9a;
+  font-size: 11px;
+}
+.ctx-item:hover .ctx-key { color: #ccd; }
+.ctx-sep {
+  height: 1px;
+  margin: 5px 6px;
+  background: #3c3c3c;
+}
+
+/* ---- Toast ---- */
+.toast {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  padding: 6px 14px;
+  background: rgba(20, 20, 20, 0.92);
+  border: 1px solid #3c3c3c;
+  border-radius: 16px;
+  color: #e6e6e6;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.25s ease;
+}
+.toast.fade { opacity: 0; }
+
+/* ---- Overlay ---- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+.overlay-box {
+  text-align: center;
+  padding: 28px 36px;
+  background: #2b2b2b;
+  border: 1px solid #3c3c3c;
+  border-radius: 12px;
+  color: #e6e6e6;
+}
+#overlay-msg { font-size: 15px; margin-bottom: 16px; }
+#overlay-restart {
+  padding: 8px 20px;
+  font-size: 13px;
+  color: #fff;
+  background: #0e639c;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+#overlay-restart:hover { background: #1177bb; }
+.overlay-hint { margin-top: 12px; font-size: 11px; color: #9a9a9a; }
+
+.hidden { display: none !important; }
