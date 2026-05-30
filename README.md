@@ -137,6 +137,22 @@ VEShell/
 └─ dist/                  Build output (installer, portable) — not source
 ```
 
+## Changelog
+
+### 1.0.1
+- **Fixed double-paste.** A real Ctrl+V inserted the clipboard twice — VEShell's
+  own paste handler *and* the browser's native paste action both fired (xterm
+  has its own `paste` DOM handler). Returning `false` from the key handler told
+  xterm to skip the key but did not cancel the native default action. Handled
+  shortcuts (Ctrl+V, Ctrl+Shift+V/C/X/A, smart Ctrl+C copy) now call
+  `preventDefault()`, so copy/paste fire exactly once. Added e2e regression test
+  5b asserting the shortcuts are default-prevented (synthetic key events don't
+  trigger the OS-level native paste, so the original suite missed it).
+
+### 1.0.0
+- Initial release: PowerShell → Claude Code terminal wrapper with reliable
+  mouse/keyboard cut/copy/paste, NSIS installer + portable build.
+
 ## License
 
 VEShell is free software under the **GNU General Public License v3.0** — see
