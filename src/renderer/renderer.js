@@ -113,23 +113,29 @@ term.attachCustomKeyEventHandler((e) => {
   const alt = e.altKey;
   const key = (e.key || '').toLowerCase();
 
+  // When we handle a shortcut ourselves we MUST preventDefault, otherwise the
+  // browser's native copy/paste default action ALSO fires (xterm has its own
+  // 'paste'/'copy' DOM handlers) and we'd paste/copy twice. Returning false
+  // only tells xterm to skip the key — it does not stop the default action.
+  const handle = (fn) => { e.preventDefault(); fn(); return false; };
+
   // Explicit, always-on shortcuts (never ambiguous with terminal control codes).
-  if (ctrl && shift && key === 'c') { doCopy(false); return false; }
-  if (ctrl && shift && key === 'v') { doPaste(); return false; }
-  if (ctrl && shift && key === 'x') { doCut(); return false; }
-  if (ctrl && shift && key === 'a') { term.selectAll(); return false; }
+  if (ctrl && shift && key === 'c') return handle(() => doCopy(false));
+  if (ctrl && shift && key === 'v') return handle(() => doPaste());
+  if (ctrl && shift && key === 'x') return handle(() => doCut());
+  if (ctrl && shift && key === 'a') return handle(() => term.selectAll());
 
   // Smart Ctrl+C: copy when there's a real (non-empty) selection, otherwise
   // send interrupt (^C). Gate on getSelection().length, not hasSelection(),
   // so a whitespace-only "phantom" selection can't swallow the interrupt.
   if (ctrl && !shift && !alt && key === 'c') {
     const sel = term.getSelection();
-    if (sel && sel.length) { doCopy(true); return false; }
+    if (sel && sel.length) return handle(() => doCopy(true));
     return true; // let xterm send \x03 to Claude
   }
 
   // Ctrl+V: paste.
-  if (ctrl && !shift && !alt && key === 'v') { doPaste(); return false; }
+  if (ctrl && !shift && !alt && key === 'v') return handle(() => doPaste());
 
   return true;
 });

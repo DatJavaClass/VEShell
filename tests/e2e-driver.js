@@ -30,10 +30,13 @@ module.exports = function ({ app, mainWindow, clipboard, getPty }) {
       ctrlKey: !!mods.ctrl, shiftKey: !!mods.shift, altKey: !!mods.alt,
       bubbles: true, cancelable: true
     });
+    // Returns event.defaultPrevented so tests can confirm our handler called
+    // preventDefault() — the thing that stops the browser's native paste/copy
+    // default action from firing a second time (the double-paste bug).
     return exec(`(() => {
       const ev = new KeyboardEvent('keydown', ${opts});
       window.__veshell.textarea.dispatchEvent(ev);
-      return true;
+      return ev.defaultPrevented;
     })()`);
   }
 
@@ -146,6 +149,22 @@ module.exports = function ({ app, mainWindow, clipboard, getPty }) {
       // Clear the prompt line so it does not interfere with later tests.
       await exec("window.__veshell.term.paste('')");
       if (getPty()) getPty().write('\x15'); // Ctrl+U clears the PSReadLine input line
+      await sleep(200);
+    }
+
+    // --- 5b. Paste/copy shortcuts call preventDefault (no native double-paste) -
+    // Regression guard for the double-paste bug: a real Ctrl+V triggers both our
+    // handler AND the browser's native paste unless we preventDefault. Synthetic
+    // events can't fire the native default, so we assert defaultPrevented here.
+    {
+      const vCtrl = await key('v', { ctrl: true });
+      const vCtrlShift = await key('v', { ctrl: true, shift: true });
+      const cCtrlShift = await key('c', { ctrl: true, shift: true });
+      const allPrevented = vCtrl === true && vCtrlShift === true && cCtrlShift === true;
+      record('5b. Paste/copy shortcuts preventDefault (no native double-paste)',
+        allPrevented,
+        `Ctrl+V=${vCtrl} Ctrl+Shift+V=${vCtrlShift} Ctrl+Shift+C=${cCtrlShift}`);
+      if (getPty()) getPty().write('\x15');
       await sleep(200);
     }
 

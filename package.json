@@ -1,7 +1,7 @@
 {
   "name": "veshell",
   "productName": "VEShell",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A reliable terminal wrapper for PowerShell + Claude Code with rock-solid mouse/keyboard cut, copy, and paste.",
   "author": "victorycomputersystems@gmail.com",
   "license": "GPL-3.0-or-later",
