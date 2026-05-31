@@ -1,28 +1,27 @@
 # VEShell
 
-**VEShell** — *Very Easy Shell* — is a reliable terminal wrapper for
-**PowerShell → Claude Code** with rock-solid mouse and keyboard
-**cut / copy / paste**.
+**VEShell** (*Very Easy Shell*) is a reliable PowerShell terminal with
+rock-solid mouse and keyboard **cut / copy / paste**, plus a built-in
+**ClaudeWhat** explain feature for learners.
 
-It opens a window, spawns a real PowerShell session inside it (via Windows
-ConPTY), and that session invokes Claude Code. Selection and clipboard are
-handled by a full terminal emulator (xterm.js) — the same engine VS Code's
-integrated terminal uses — so copy/paste does not depend on conhost's flaky
-"Quick Edit" mark mode. Copying *out* to other apps uses the normal OS
-clipboard.
+It opens a window and spawns a real PowerShell session inside it (via Windows
+ConPTY). Selection and clipboard are handled by a full terminal emulator
+(xterm.js), the same engine VS Code's integrated terminal uses, so copy/paste
+does not depend on conhost's flaky "Quick Edit" mark mode. Copying *out* to
+other apps uses the normal OS clipboard.
 
-Launch chain: **VEShell window → powershell.exe (-NoExit) → claude**.
-When Claude exits you drop back to a live PowerShell prompt in the same window.
+Launch chain: **VEShell window → powershell.exe (-NoExit)**. You get a live
+PowerShell prompt in the window and stay there.
 
 ## Project status
 
-VEShell is an **ongoing project**. The aim is to keep adding quality-of-life
-utility around the shell **without losing CLI efficiency** — conveniences that
-stay out of the way, never a heavier workflow.
+VEShell is an **ongoing project**, and it's aim is to keep adding
+quality-of-life utility around the shell **without losing CLI efficiency**:
+conveniences that stay out of the way, never a heavier workflow.
 
-As of now there are **no plans to bring VEShell to other LLMs** in the near
-future. That's a problem for Future Me... and when was the last time Future Me
-ever did anything for Now Me?
+As of now there are **no plans to broaden VEShell beyond its current setup** in
+the near future. That's a problem for Future Me... and when was the last time
+Future Me ever did anything for Now Me?
 
 ## Cut / Copy / Paste
 
@@ -32,33 +31,30 @@ ever did anything for Now Me?
 | Paste | **Ctrl+V** or **Ctrl+Shift+V** | Middle-click, or right-click → Paste |
 | Cut | **Ctrl+Shift+X** | Right-click → Cut |
 | Select all | **Ctrl+Shift+A** | Right-click → Select All |
-| Interrupt Claude (^C) | **Ctrl+C** (when nothing is selected) | — |
+| Interrupt the running program (^C) | **Ctrl+C** (when nothing is selected) | n/a |
 
 Notes:
 - **Ctrl+C is smart**: if you have a selection it copies; if not, it sends the
-  interrupt signal to Claude. This matches Windows Terminal's behavior.
-- **Select with the mouse** by click-dragging. If Claude's TUI has mouse mode
-  active (so a drag would scroll/interact instead), hold **Shift** while
-  dragging to force a text selection.
-- **Cut** on terminal output can only *copy* — scrollback text cannot be
-  removed from the screen, so Cut behaves as Copy there.
-- Multiline pastes use bracketed-paste mode, so they land in Claude's prompt as
-  one block instead of executing line-by-line.
+  interrupt signal to the running program. This matches Windows Terminal's
+  behavior.
+- **Select with the mouse** by click-dragging. If the running program's TUI has
+  mouse mode active (so a drag would scroll/interact instead), hold **Shift**
+  while dragging to force a text selection.
+- **Cut** on terminal output can only *copy*: scrollback text cannot be removed
+  from the screen, so Cut behaves as Copy there.
+- Multiline pastes use bracketed-paste mode, so they land in the prompt as one
+  block instead of executing line-by-line.
 
-## ClaudeWhat — explain a selection in context
+## ClaudeWhat: explain a selection in context
 
-Highlight any part of what's on screen — a keyword, a command, a line of code
-Claude wrote — and press **Ctrl+Shift+W** (or right-click → *ClaudeWhat*).
-VEShell pivots to a full-window panel and shows a short, learner-friendly
-explanation of *that* selection **in the context of your terminal**, not a
-generic definition.
+Highlight any part of what's on screen (a keyword, a command, a line of code)
+and press **Ctrl+Shift+W** (or right-click → *ClaudeWhat*). VEShell pivots to a
+full-window panel and shows a short, learner-friendly explanation of *that*
+selection in the context of your terminal, not a generic definition.
 
-It works by reading the selection plus the surrounding scrollback (so the prompt
-that produced a response is included — that's what lets it answer *why*
-something is there), then asking a one-shot `claude -p` call for a teaching
-explanation. It uses your existing Claude Code login — no API key, no extra
-setup. Everything stays inside VEShell; nothing is typed into Claude's live
-session.
+It works by reading the selection plus the surrounding scrollback, so the line
+that produced a result is included, which is what lets it answer *why* something
+is there. Everything stays inside VEShell and the terminal is left alone.
 
 | Action | Key |
 |---|---|
@@ -67,23 +63,22 @@ session.
 | Go deeper on the same selection | **Explain More** button |
 | Return to your terminal | **Esc** (or **Return to project**) |
 
-The explanation is a fresh, after-the-fact teaching answer generated from what's
-on screen — a helpful reconstruction, not a replay of Claude's original internal
-reasoning (that isn't stored anywhere). The terminal underneath is untouched
-while the panel is open, and closing it drops you back exactly where you were.
+The explanation is generated fresh from what's on screen each time you ask. The
+terminal underneath stays untouched while the panel is open, and closing it puts
+you back exactly where you left off.
 
 ## Install
 
-### Option A — Installer (recommended; installs to Program Files)
+### Option A: Installer (recommended; installs to Program Files)
 1. Run **`dist\VEShell-Setup-1.5.0.exe`**.
 2. Accept the UAC prompt (needed to write to `C:\Program Files\VEShell`).
 3. It creates a **Desktop shortcut** and Start Menu entry, and can launch on
    finish. Uninstall via Settings → Apps like any program.
 
-### Option B — Portable (no admin, run from anywhere)
-- Use **`dist\VEShell-Portable-1.5.0.exe`** — a single self-contained
+### Option B: Portable (no admin, run from anywhere)
+- Use **`dist\VEShell-Portable-1.5.0.exe`**, a single self-contained
   executable. Put it wherever you like (Desktop, a USB stick, a tools folder)
-  and double-click. To make a shortcut, right-click it → *Send to → Desktop*.
+  and double-click. To setup a shortcut, right-click it → *Send to → Desktop*.
 - Or use the unpacked folder **`dist\win-unpacked\`** and run `VEShell.exe`
   inside it. Copy the whole folder to keep it portable.
 
@@ -107,16 +102,15 @@ Example:
 }
 ```
 
-- `cwd` — starting directory (empty = your user profile folder).
-- To start in plain PowerShell without Claude, set
-  `"shellArgs": ["-NoLogo"]`.
+- `cwd`: starting directory (empty = your user profile folder).
+- For a plain PowerShell prompt only, set `"shellArgs": ["-NoLogo"]`.
 - Appearance (font, theme, copy-on-select) also lives in
   `src/renderer/renderer.js` for source builds.
 
 ## Build from source
 
 ```powershell
-cd C:\Users\victo\Dropbox\Working\Projects\VEShell
+cd VEShell
 npm install            # also rebuilds node-pty for Electron (postinstall)
 npm start              # run in dev
 npm run dist           # build installer + portable into dist\
@@ -126,11 +120,11 @@ Requires Node.js and the Visual Studio C++ build tools (node-pty is native).
 
 ## Testing
 
-Three automated suites (all passing — 22 checks):
+Three automated suites (all passing, 22 checks):
 
 ```powershell
 npm test            # runs all three in sequence
-npm run test:chain  # headless: node-pty -> powershell -> claude launch chain
+npm run test:chain  # headless: node-pty -> powershell launch chain
 npm run test:e2e    # real Electron GUI: copy/paste, keyboard, mouse, edge cases
 npm run test:stress # headless: resize storm, output flood, spawn/kill churn, unicode
 ```
@@ -144,7 +138,7 @@ npm run test:stress # headless: resize storm, output flood, spawn/kill churn, un
 
 Note: node-pty prints a harmless `AttachConsole failed` line to stderr at
 session teardown (its console-list helper). It runs in a child process, is
-bounded by a 5 s timeout, and cannot hang or crash VEShell — you'll only ever
+bounded by a 5 s timeout, and cannot hang or crash VEShell. You will only ever
 see it when launching from a terminal, never from the shortcut.
 
 ## Project layout
@@ -152,8 +146,8 @@ see it when launching from a terminal, never from the shortcut.
 ```
 VEShell/
 ├─ src/
-│  ├─ main.js              Electron main: spawns ConPTY powershell→claude;
-│  │                       clipboard + ClaudeWhat (claude -p) IPC handlers
+│  ├─ main.js              Electron main: spawns the ConPTY PowerShell session;
+│  │                       clipboard + ClaudeWhat IPC handlers
 │  ├─ preload.js           Secure IPC bridge (clipboard, ClaudeWhat, session)
 │  ├─ assets/icon.ico      App/window icon
 │  └─ renderer/            xterm.js UI + clipboard/keyboard/mouse + ClaudeWhat
@@ -162,24 +156,21 @@ VEShell/
 │  └─ make-icon.ps1        Regenerates icon.ico from the source .ico
 ├─ config.json            Runtime defaults (shell / cwd / font)
 ├─ package.json           Deps + electron-builder config
-└─ dist/                  Build output (installer, portable) — not source
+└─ dist/                  Build output (installer, portable), not source
 ```
 
 ## Changelog
 
 ### 1.5.0
-- **Added ClaudeWhat** — select any text on screen and press **Ctrl+Shift+W**
+- **Added ClaudeWhat**: select any text on screen and press **Ctrl+Shift+W**
   (or right-click → ClaudeWhat) to get a contextual, learner-friendly
   explanation of the selection in a full-window panel, with Page Up/Page Down,
-  *Explain More*, and *Return to project*. It scrapes the selection plus
-  surrounding scrollback and asks a one-shot `claude -p` (using your existing
-  login — no API key) for the explanation. Runs entirely inside VEShell and
-  never injects into Claude's live session; closing the panel aborts any
-  in-flight call so it doesn't waste a generation.
+  *Explain More*, and *Return to project*. It reads the selection plus the
+  surrounding scrollback and runs entirely inside VEShell.
 - Light explanatory comments added throughout the source.
 
 ### 1.0.1
-- **Fixed double-paste.** A real Ctrl+V inserted the clipboard twice — VEShell's
+- **Fixed double-paste.** A real Ctrl+V inserted the clipboard twice: VEShell's
   own paste handler *and* the browser's native paste action both fired (xterm
   has its own `paste` DOM handler). Returning `false` from the key handler told
   xterm to skip the key but did not cancel the native default action. Handled
@@ -189,11 +180,13 @@ VEShell/
   trigger the OS-level native paste, so the original suite missed it).
 
 ### 1.0.0
-- Initial release: PowerShell → Claude Code terminal wrapper with reliable
-  mouse/keyboard cut/copy/paste, NSIS installer + portable build.
+- Initial release: PowerShell terminal wrapper with reliable mouse/keyboard
+  cut/copy/paste, NSIS installer + portable build.
 
 ## License
 
-VEShell is free software under the **GNU General Public License v3.0** — see
+VEShell is free software under the **GNU General Public License v3.0**, see
 [LICENSE](LICENSE). You may use, study, share, and modify it under those terms;
 derivative works must remain GPL-licensed.
+
+Developed in partnership with Claude Kodemen.

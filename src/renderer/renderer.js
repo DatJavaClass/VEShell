@@ -91,7 +91,7 @@ async function doCopy(clearAfter) {
   return false;
 }
 
-// "Cut" on terminal output can only copy — scrollback text cannot be removed.
+// "Cut" on terminal output can only copy; scrollback text cannot be removed.
 async function doCut() {
   const ok = await doCopy(true);
   if (ok) showToast('Cut (copied)');
@@ -127,7 +127,7 @@ term.attachCustomKeyEventHandler((e) => {
   // When we handle a shortcut ourselves we MUST preventDefault, otherwise the
   // browser's native copy/paste default action ALSO fires (xterm has its own
   // 'paste'/'copy' DOM handlers) and we'd paste/copy twice. Returning false
-  // only tells xterm to skip the key — it does not stop the default action.
+  // only tells xterm to skip the key, it does not stop the default action.
   const handle = (fn) => { e.preventDefault(); fn(); return false; };
 
   // Explicit, always-on shortcuts (never ambiguous with terminal control codes).
@@ -136,7 +136,7 @@ term.attachCustomKeyEventHandler((e) => {
   if (ctrl && shift && key === 'x') return handle(() => doCut());
   if (ctrl && shift && key === 'a') return handle(() => term.selectAll());
 
-  // Ctrl+Shift+W: ClaudeWhat — explain the current selection in context.
+  // Ctrl+Shift+W: ClaudeWhat, explain the current selection in context.
   if (ctrl && shift && key === 'w') return handle(() => openClaudeWhat());
 
   // Smart Ctrl+C: copy when there's a real (non-empty) selection, otherwise
@@ -291,7 +291,7 @@ function showToast(text) {
   }, 900);
 }
 
-// Keep focus on the terminal when clicking in the window — but not while the
+// Keep focus on the terminal when clicking in the window, but not while the
 // context menu or the session-ended overlay is up (don't steal their clicks).
 window.addEventListener('mouseup', () => {
   if (menu.classList.contains('hidden') &&
@@ -394,7 +394,7 @@ function openClaudeWhat() {
   }
   cwState.selection = sel.trim();
   cwState.context = buildContextPayload(cwState.selection, scrapeContext());
-  cwTitle.textContent = 'ClaudeWhat — explaining selection';
+  cwTitle.textContent = 'ClaudeWhat: explaining selection';
   cwPanel.classList.remove('hidden');
   requestExplanation(CW_INSTRUCTION);
 }
@@ -470,7 +470,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'PageDown') { e.preventDefault(); cwPage(1); return; }
 }, true);
 
-// Debug/test hook — only exposed under the e2e flag, never in normal/prod use.
+// Debug/test hook, only exposed under the e2e flag, never in normal/prod use.
 // Lets the automated e2e driver reach the terminal and clipboard actions.
 if (veshell.e2e) {
   window.__veshell = {

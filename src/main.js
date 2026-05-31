@@ -147,7 +147,7 @@ function spawnPty(cols, rows) {
   });
 
   proc.onExit(({ exitCode, signal }) => {
-    // Only act if this is still the current session — an old pty dying after a
+    // Only act if this is still the current session. An old pty dying after a
     // restart must not null the new one or flash the overlay over it.
     if (ptyProc !== proc) return;
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -194,7 +194,7 @@ function createWindow() {
     }
   });
 
-  // No application menu — copy/paste is handled in-terminal, not via a menu bar.
+  // No application menu. Copy/paste is handled in-terminal, not via a menu bar.
   Menu.setApplicationMenu(null);
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
@@ -390,7 +390,7 @@ ipcMain.on('session:restart', (event, dims) => {
 // ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
-// Single instance — a second launch focuses the existing window.
+// Single instance: a second launch focuses the existing window.
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();

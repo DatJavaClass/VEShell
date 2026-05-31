@@ -4,7 +4,7 @@
 // Preload bridge. Runs with Node access but in an isolated world, and exposes a
 // small, explicit `window.veshell` API to the renderer over IPC. This is the
 // only surface the (sandboxed, no-Node) renderer can use to reach the main
-// process — keep it minimal; never expose raw ipcRenderer or Node globals.
+// process. Keep it minimal; never expose raw ipcRenderer or Node globals.
 // ===========================================================================
 
 const { contextBridge, ipcRenderer } = require('electron');
@@ -12,7 +12,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Minimal, explicit API surface exposed to the renderer. No Node globals leak
 // through (contextIsolation is on); the renderer can only do these things.
 contextBridge.exposeInMainWorld('veshell', {
-  // Dev/e2e flag — gates the renderer's debug hook so it never ships in prod.
+  // Dev/e2e flag, gates the renderer's debug hook so it never ships in prod.
   e2e: !!process.env.VESHELL_E2E,
 
   // Tell main the renderer (and xterm) is ready, with initial dimensions.
