@@ -3,3 +3,4 @@ dist/
 *.log
 tests/*-result.json
 *.tmp.*
+CLAUDE.md
