@@ -1,8 +1,8 @@
 {
   "name": "veshell",
   "productName": "VEShell",
-  "version": "1.0.1",
-  "description": "A reliable terminal wrapper for PowerShell + Claude Code with rock-solid mouse/keyboard cut, copy, and paste.",
+  "version": "1.5.0",
+  "description": "A reliable terminal wrapper for PowerShell + Claude Code with rock-solid mouse/keyboard cut, copy, and paste, plus ClaudeWhat contextual explanations.",
   "author": "victorycomputersystems@gmail.com",
   "license": "GPL-3.0-or-later",
   "main": "src/main.js",

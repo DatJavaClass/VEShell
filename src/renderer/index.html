@@ -18,9 +18,26 @@
     <div class="ctx-item" data-action="paste" role="menuitem">Paste<span class="ctx-key">Ctrl+V</span></div>
     <div class="ctx-sep"></div>
     <div class="ctx-item" data-action="selectAll" role="menuitem">Select All<span class="ctx-key">Ctrl+Shift+A</span></div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" data-action="claudewhat" role="menuitem">ClaudeWhat (explain selection)<span class="ctx-key">Ctrl+Shift+W</span></div>
     <div class="ctx-item" data-action="clear" role="menuitem">Clear<span class="ctx-key"></span></div>
     <div class="ctx-sep"></div>
     <div class="ctx-item" data-action="restart" role="menuitem">Restart Session<span class="ctx-key"></span></div>
+  </div>
+
+  <!-- ClaudeWhat: a VEShell-owned panel showing a contextual explanation of
+       the selected snippet. The terminal stays untouched underneath. -->
+  <div id="claudewhat" class="cw-panel hidden">
+    <div class="cw-header">
+      <span id="cw-title" class="cw-title">ClaudeWhat</span>
+    </div>
+    <div id="cw-body" class="cw-body" tabindex="0"></div>
+    <div class="cw-toolbar">
+      <button id="cw-pageup" class="cw-btn" title="Scroll up (PageUp)">Page Up</button>
+      <button id="cw-pagedown" class="cw-btn" title="Scroll down (PageDown)">Page Down</button>
+      <button id="cw-more" class="cw-btn" title="Ask for a deeper explanation">Explain More</button>
+      <button id="cw-return" class="cw-btn cw-btn-primary" title="Close and return (Esc)">Return to project</button>
+    </div>
   </div>
 
   <!-- Transient toast (Copied / Pasted / etc.) -->

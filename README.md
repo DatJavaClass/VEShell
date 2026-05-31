@@ -45,16 +45,43 @@ Notes:
 - Multiline pastes use bracketed-paste mode, so they land in Claude's prompt as
   one block instead of executing line-by-line.
 
+## ClaudeWhat — explain a selection in context
+
+Highlight any part of what's on screen — a keyword, a command, a line of code
+Claude wrote — and press **Ctrl+Shift+W** (or right-click → *ClaudeWhat*).
+VEShell pivots to a full-window panel and shows a short, learner-friendly
+explanation of *that* selection **in the context of your terminal**, not a
+generic definition.
+
+It works by reading the selection plus the surrounding scrollback (so the prompt
+that produced a response is included — that's what lets it answer *why*
+something is there), then asking a one-shot `claude -p` call for a teaching
+explanation. It uses your existing Claude Code login — no API key, no extra
+setup. Everything stays inside VEShell; nothing is typed into Claude's live
+session.
+
+| Action | Key |
+|---|---|
+| Explain the current selection | **Ctrl+Shift+W** (or right-click → ClaudeWhat) |
+| Scroll the explanation | **Page Up** / **Page Down** (or the buttons) |
+| Go deeper on the same selection | **Explain More** button |
+| Return to your terminal | **Esc** (or **Return to project**) |
+
+The explanation is a fresh, after-the-fact teaching answer generated from what's
+on screen — a helpful reconstruction, not a replay of Claude's original internal
+reasoning (that isn't stored anywhere). The terminal underneath is untouched
+while the panel is open, and closing it drops you back exactly where you were.
+
 ## Install
 
 ### Option A — Installer (recommended; installs to Program Files)
-1. Run **`dist\VEShell-Setup-1.0.0.exe`**.
+1. Run **`dist\VEShell-Setup-1.5.0.exe`**.
 2. Accept the UAC prompt (needed to write to `C:\Program Files\VEShell`).
 3. It creates a **Desktop shortcut** and Start Menu entry, and can launch on
    finish. Uninstall via Settings → Apps like any program.
 
 ### Option B — Portable (no admin, run from anywhere)
-- Use **`dist\VEShell-Portable-1.0.0.exe`** — a single self-contained
+- Use **`dist\VEShell-Portable-1.5.0.exe`** — a single self-contained
   executable. Put it wherever you like (Desktop, a USB stick, a tools folder)
   and double-click. To make a shortcut, right-click it → *Send to → Desktop*.
 - Or use the unpacked folder **`dist\win-unpacked\`** and run `VEShell.exe`
@@ -125,10 +152,11 @@ see it when launching from a terminal, never from the shortcut.
 ```
 VEShell/
 ├─ src/
-│  ├─ main.js              Electron main: spawns ConPTY powershell→claude
-│  ├─ preload.js           Secure IPC bridge
+│  ├─ main.js              Electron main: spawns ConPTY powershell→claude;
+│  │                       clipboard + ClaudeWhat (claude -p) IPC handlers
+│  ├─ preload.js           Secure IPC bridge (clipboard, ClaudeWhat, session)
 │  ├─ assets/icon.ico      App/window icon
-│  └─ renderer/            xterm.js UI + clipboard/keyboard/mouse wiring
+│  └─ renderer/            xterm.js UI + clipboard/keyboard/mouse + ClaudeWhat
 ├─ build/
 │  ├─ icon.ico             Multi-size icon for packaging
 │  └─ make-icon.ps1        Regenerates icon.ico from the source .ico
@@ -138,6 +166,17 @@ VEShell/
 ```
 
 ## Changelog
+
+### 1.5.0
+- **Added ClaudeWhat** — select any text on screen and press **Ctrl+Shift+W**
+  (or right-click → ClaudeWhat) to get a contextual, learner-friendly
+  explanation of the selection in a full-window panel, with Page Up/Page Down,
+  *Explain More*, and *Return to project*. It scrapes the selection plus
+  surrounding scrollback and asks a one-shot `claude -p` (using your existing
+  login — no API key) for the explanation. Runs entirely inside VEShell and
+  never injects into Claude's live session; closing the panel aborts any
+  in-flight call so it doesn't waste a generation.
+- Light explanatory comments added throughout the source.
 
 ### 1.0.1
 - **Fixed double-paste.** A real Ctrl+V inserted the clipboard twice — VEShell's
