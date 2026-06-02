@@ -1,8 +1,9 @@
 # VEShell
 
 **VEShell** (*Very Easy Shell*) is a reliable PowerShell terminal with
-rock-solid mouse and keyboard **cut / copy / paste**, plus a built-in
-**ClaudeWhat** explain feature for learners.
+rock-solid mouse and keyboard **cut / copy / paste**, plus built-in learning
+tools: the **ClaudeWhat** explainer and a **Verbose run** mode that carries out
+a task and walks you through its critical steps.
 
 It opens a window and spawns a real PowerShell session inside it (via Windows
 ConPTY). Selection and clipboard are handled by a full terminal emulator
@@ -67,16 +68,43 @@ The explanation is generated fresh from what's on screen each time you ask. The
 terminal underneath stays untouched while the panel is open, and closing it puts
 you back exactly where you left off.
 
+## Verbose run: watch a task happen, step by step
+
+Press **Ctrl+Shift+R** (or right-click → *Run a task (Verbose)*) and describe a
+task in plain language. VEShell carries it out and surfaces the **critical
+steps** one at a time, each with a short explanation, paced by a timer so you
+can read along instead of watching everything fly past. Use **Next** to move
+ahead early, or pause on any step and send it to ClaudeWhat to dig deeper. Steps
+you have explored are marked and remembered across restarts, so you can see what
+you have already looked at.
+
+| Action | Key |
+|---|---|
+| Start a verbose run | **Ctrl+Shift+R** (or right-click → Run a task (Verbose)) |
+| Move to the next step | **Next** button (or wait for the timer) |
+| Explore the current step | **ClaudeWhat this** button |
+| Return to your terminal | **Esc** (or **Return to project**) |
+
+## Finding the learning tools
+
+Both learning tools are one keystroke away, and the bar along the bottom of the
+window rotates a reminder of each shortcut:
+
+- **Ctrl+Shift+W** explains whatever text you have selected (ClaudeWhat).
+- **Ctrl+Shift+R** starts a Verbose run.
+
+They are also both in the **right-click menu**, so there is nothing to memorize.
+
 ## Install
 
 ### Option A: Installer (recommended; installs to Program Files)
-1. Run **`dist\VEShell-Setup-1.5.0.exe`**.
+1. Run **`dist\VEShell-Setup-1.8.0.exe`**.
 2. Accept the UAC prompt (needed to write to `C:\Program Files\VEShell`).
 3. It creates a **Desktop shortcut** and Start Menu entry, and can launch on
    finish. Uninstall via Settings → Apps like any program.
 
 ### Option B: Portable (no admin, run from anywhere)
-- Use **`dist\VEShell-Portable-1.5.0.exe`**, a single self-contained
+- Use **`dist\VEShell-Portable-1.8.0.exe`**, a single self-contained
   executable. Put it wherever you like (Desktop, a USB stick, a tools folder)
   and double-click. To setup a shortcut, right-click it → *Send to → Desktop*.
 - Or use the unpacked folder **`dist\win-unpacked\`** and run `VEShell.exe`
@@ -120,13 +148,14 @@ Requires Node.js and the Visual Studio C++ build tools (node-pty is native).
 
 ## Testing
 
-Three automated suites (all passing, 22 checks):
+Four automated suites (all passing, 29 checks):
 
 ```powershell
-npm test            # runs all three in sequence
+npm test            # runs all four in sequence
 npm run test:chain  # headless: node-pty -> powershell launch chain
 npm run test:e2e    # real Electron GUI: copy/paste, keyboard, mouse, edge cases
 npm run test:stress # headless: resize storm, output flood, spawn/kill churn, unicode
+npm run test:verbose # headless: the Verbose-run callout parser
 ```
 
 - `test:e2e` drives the real renderer and verifies clipboard data actually
@@ -146,11 +175,16 @@ see it when launching from a terminal, never from the shortcut.
 ```
 VEShell/
 ├─ src/
-│  ├─ main.js              Electron main: spawns the ConPTY PowerShell session;
-│  │                       clipboard + ClaudeWhat IPC handlers
-│  ├─ preload.js           Secure IPC bridge (clipboard, ClaudeWhat, session)
+│  ├─ main.js              Electron main: app/window/pty lifecycle, wires in
+│  │                       the feature modules below
+│  ├─ claudewhat.js        ClaudeWhat subsystem (claude -p explain handler)
+│  ├─ verbose.js           Verbose-run subsystem (task run + callout stream)
+│  ├─ verbose-parse.js     Pure parser for the verbose callout stream
+│  ├─ claude-proc.js       Shared claude -p helpers (resolve, sanitize, spawn)
+│  ├─ config.js            Config load, defaults, env overrides
+│  ├─ preload.js           Secure IPC bridge (clipboard, ClaudeWhat, Verbose, session)
 │  ├─ assets/icon.ico      App/window icon
-│  └─ renderer/            xterm.js UI + clipboard/keyboard/mouse + ClaudeWhat
+│  └─ renderer/            xterm.js UI + clipboard/keyboard/mouse + ClaudeWhat + Verbose + status bar
 ├─ build/
 │  ├─ icon.ico             Multi-size icon for packaging
 │  └─ make-icon.ps1        Regenerates icon.ico from the source .ico
@@ -160,6 +194,18 @@ VEShell/
 ```
 
 ## Changelog
+
+### 1.8.0
+- **Added Verbose run**: press **Ctrl+Shift+R** (or right-click → Run a task
+  (Verbose)) to describe a task and watch its critical steps appear one at a
+  time, each with a short explanation, paced by a timer with a *Next* control.
+  Pause on any step to send it to ClaudeWhat; explored steps are remembered
+  across restarts.
+- **Added a bottom status bar** that rotates reminders of the ClaudeWhat and
+  Verbose run shortcuts.
+- Split the main process into focused modules (config, shared claude-proc
+  helpers, claudewhat, verbose) so new features drop in cleanly.
+- Added a headless test for the Verbose-run callout parser.
 
 ### 1.5.0
 - **Added ClaudeWhat**: select any text on screen and press **Ctrl+Shift+W**

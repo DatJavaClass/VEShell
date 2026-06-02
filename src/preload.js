@@ -41,6 +41,22 @@ contextBridge.exposeInMainWorld('veshell', {
     ipcRenderer.invoke('claudewhat:explain', { instruction, context }),
   claudeWhatCancel: () => ipcRenderer.send('claudewhat:cancel'),
 
+  // Verbose run: headless `claude -p` task that streams critical-segment
+  // callouts back to the renderer as they arrive.
+  verboseStart: (task) => ipcRenderer.send('verbose:start', task),
+  verboseCancel: () => ipcRenderer.send('verbose:cancel'),
+  verboseMarkVisited: (runId, index) =>
+    ipcRenderer.send('verbose:markVisited', { runId, index }),
+  verboseHistoryLoad: () => ipcRenderer.invoke('verbose:historyLoad'),
+  onVerboseSegment: (cb) => {
+    ipcRenderer.removeAllListeners('verbose:segment');
+    ipcRenderer.on('verbose:segment', (_e, seg) => cb(seg));
+  },
+  onVerboseStatus: (cb) => {
+    ipcRenderer.removeAllListeners('verbose:status');
+    ipcRenderer.on('verbose:status', (_e, s) => cb(s));
+  },
+
   // session
   restart: (dims) => ipcRenderer.send('session:restart', dims)
 });

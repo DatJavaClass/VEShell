@@ -12,7 +12,9 @@ html, body {
 
 #terminal {
   position: absolute;
-  inset: 0;
+  /* Leave room for the 22px status bar at the bottom so xterm never sits under
+     it (safeFit measures this reduced height). */
+  inset: 0 0 22px 0;
   padding: 6px 4px 4px 8px;
 }
 
@@ -135,6 +137,30 @@ html, body {
 }
 .cw-btn-primary:hover { background: #1177bb; }
 
+/* ---- Status bar ----
+   Slim bar pinned to the bottom. Above the terminal but below the panels
+   (1160) and the session overlay (1200), so those full-window surfaces cover
+   it. The right-aligned hint alternates via a renderer timer. */
+.statusbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 900;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 12px;
+  background: #181818;
+  border-top: 1px solid #3c3c3c;
+  color: #9a9a9a;
+  font-size: 11px;
+  letter-spacing: 0.2px;
+  user-select: none;
+}
+.status-hint { white-space: nowrap; }
+
 /* ---- Toast ---- */
 .toast {
   position: fixed;
@@ -185,5 +211,157 @@ html, body {
 }
 #overlay-restart:hover { background: #1177bb; }
 .overlay-hint { margin-top: 12px; font-size: 11px; color: #9a9a9a; }
+
+/* ---- Verbose run: prompt overlay ----
+   A centered modal box over a dimmed backdrop, like .overlay. Sits below the
+   ClaudeWhat panel (1180) and the session overlay (1200). */
+.vr-prompt {
+  position: fixed;
+  inset: 0;
+  z-index: 1160;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+.vr-prompt-box {
+  width: 560px;
+  max-width: 90%;
+  max-height: 80%;
+  display: flex;
+  flex-direction: column;
+  padding: 22px 24px;
+  background: #2b2b2b;
+  border: 1px solid #3c3c3c;
+  border-radius: 12px;
+  color: #e6e6e6;
+}
+.vr-prompt-title {
+  color: #23d18b;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 14px;
+  letter-spacing: 0.4px;
+  margin-bottom: 8px;
+}
+.vr-prompt-hint {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #9a9a9a;
+}
+.vr-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-size: 14px;
+  color: #e6e6e6;
+  background: #1b1b1b;
+  border: 1px solid #3c3c3c;
+  border-radius: 6px;
+  resize: vertical;
+  outline: none;
+}
+.vr-input:focus { border-color: #0e639c; }
+.vr-prompt-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+.vr-history-label {
+  margin-top: 20px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  color: #9a9a9a;
+}
+.vr-history {
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.vr-history::-webkit-scrollbar { width: 12px; }
+.vr-history::-webkit-scrollbar-thumb { background: #4a4a4a; border-radius: 6px; }
+.vr-history::-webkit-scrollbar-track { background: #2b2b2b; }
+
+/* ---- Verbose run: reveal panel ----
+   A full-window column, like .cw-panel. Same 1160 layer as the prompt so
+   ClaudeWhat (1180) opens on top of a revealed segment. */
+.vr-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 1160;
+  display: flex;
+  flex-direction: column;
+  background: #1b1b1b;
+}
+.vr-panel-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid #3c3c3c;
+  background: #181818;
+}
+.vr-panel-tag {
+  color: #23d18b;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 13px;
+  letter-spacing: 0.4px;
+}
+/* Timer: small, muted, right-aligned. */
+.vr-timer {
+  margin-left: auto;
+  font-size: 12px;
+  color: #9a9a9a;
+}
+.vr-panel-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 18px 22px;
+  color: #e6e6e6;
+}
+.vr-panel-body::-webkit-scrollbar { width: 12px; }
+.vr-panel-body::-webkit-scrollbar-thumb { background: #4a4a4a; border-radius: 6px; }
+.vr-panel-body::-webkit-scrollbar-track { background: #1b1b1b; }
+.vr-label {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 14px;
+  color: #e6e6e6;
+}
+/* Snippet: monospace block, hidden when empty (no text content). */
+.vr-snippet {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  background: #181818;
+  border: 1px solid #3c3c3c;
+  border-radius: 6px;
+  font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #e6e6e6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+.vr-snippet:empty { display: none; }
+.vr-detail {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #e6e6e6;
+}
+.vr-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid #3c3c3c;
+  background: #181818;
+}
+/* Visited segment: not color alone (some students are colorblind), so a
+   leading check plus a muted green. */
+.vr-visited { color: #6fbf8b; }
+.vr-visited::before { content: '\2713  '; }
 
 .hidden { display: none !important; }

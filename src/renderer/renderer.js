@@ -16,7 +16,8 @@ const APPEARANCE = {
   fontFamily: 'Cascadia Mono, Consolas, "Courier New", monospace',
   fontSize: 14,
   scrollback: 10000,
-  copyOnSelect: false
+  copyOnSelect: false,
+  verboseTimerSec: 45
 };
 
 const THEME = {
@@ -60,6 +61,9 @@ function safeFit() {
 }
 
 safeFit();
+// Refit once more after layout settles so xterm accounts for the bottom status
+// bar's reserved height (the #terminal bottom inset). Avoids a clipped last row.
+requestAnimationFrame(() => safeFit());
 term.focus();
 
 // Hand the pty its starting dimensions and let main spawn the session.
@@ -139,6 +143,9 @@ term.attachCustomKeyEventHandler((e) => {
   // Ctrl+Shift+W: ClaudeWhat, explain the current selection in context.
   if (ctrl && shift && key === 'w') return handle(() => openClaudeWhat());
 
+  // Ctrl+Shift+R: Verbose run, describe a task and watch its critical steps.
+  if (ctrl && shift && key === 'r') return handle(() => openVerbosePrompt());
+
   // Smart Ctrl+C: copy when there's a real (non-empty) selection, otherwise
   // send interrupt (^C). Gate on getSelection().length, not hasSelection(),
   // so a whitespace-only "phantom" selection can't swallow the interrupt.
@@ -211,6 +218,7 @@ menu.addEventListener('click', (e) => {
     case 'paste': doPaste(); break;
     case 'selectAll': term.selectAll(); break;
     case 'claudewhat': openClaudeWhat(); return; // panel takes focus; don't refocus term
+    case 'verbose': openVerbosePrompt(); return; // panel takes focus; don't refocus term
     case 'clear': term.clear(); break;
     case 'restart': restartSession(); break;
   }
@@ -291,12 +299,36 @@ function showToast(text) {
   }, 900);
 }
 
+// ---------------------------------------------------------------------------
+// Status bar hint
+// ---------------------------------------------------------------------------
+// The bottom bar shows one hint at a time on its right side, alternating
+// between the two shortcuts every few seconds. "ExplainPlease" is the bar's
+// label for the ClaudeWhat feature; the feature is named ClaudeWhat everywhere
+// else (menu, panel, button) and in code.
+const statusHintEl = document.getElementById('status-hint');
+const STATUS_HINTS = [
+  'Ctrl+Shift+R  ·  Verbose mode',
+  'Ctrl+Shift+W  ·  ExplainPlease'
+];
+let statusHintIndex = 0;
+
+function showStatusHint() {
+  statusHintEl.textContent = STATUS_HINTS[statusHintIndex];
+  statusHintIndex = (statusHintIndex + 1) % STATUS_HINTS.length;
+}
+
+showStatusHint();
+setInterval(showStatusHint, 4500);
+
 // Keep focus on the terminal when clicking in the window, but not while the
 // context menu or the session-ended overlay is up (don't steal their clicks).
 window.addEventListener('mouseup', () => {
   if (menu.classList.contains('hidden') &&
       overlay.classList.contains('hidden') &&
-      cwPanel.classList.contains('hidden')) {
+      cwPanel.classList.contains('hidden') &&
+      vrPanel.classList.contains('hidden') &&
+      vrPrompt.classList.contains('hidden')) {
     term.focus();
   }
 });
@@ -336,7 +368,9 @@ const CW_MORE_INSTRUCTION =
 const CW_CONTEXT_BEFORE = 60;
 const CW_CONTEXT_AFTER = 10;
 
-const cwState = { selection: '', context: '', busy: false };
+// onClose: optional callback. When set, closeClaudeWhat() calls it instead of
+// refocusing the terminal. Verbose run uses this to resume its panel.
+const cwState = { selection: '', context: '', busy: false, onClose: null };
 
 // Read the visible+nearby buffer as plain text, and find a window around the
 // selection. xterm exposes the active buffer; we translate rows to strings.
@@ -404,7 +438,26 @@ function closeClaudeWhat() {
   // Abort any in-flight explanation so it doesn't burn a generation we'll drop.
   if (cwState.busy) { try { veshell.claudeWhatCancel(); } catch (_) {} }
   cwState.busy = false;
+  // If a caller wired up an onClose hook (e.g. verbose run), let it resume
+  // instead of refocusing the terminal. The hook owns focus from here.
+  if (cwState.onClose) {
+    const cb = cwState.onClose;
+    cwState.onClose = null;
+    cb();
+    return;
+  }
   term.focus();
+}
+
+// Open ClaudeWhat seeded with arbitrary text (used by verbose run to explain a
+// callout). Mirrors openClaudeWhat from cwTitle onward, but takes its selection
+// and context from the passed text rather than the terminal selection.
+function openClaudeWhatForText(text) {
+  cwState.selection = text;
+  cwState.context = buildContextPayload(text, '(from a verbose-run callout)');
+  cwTitle.textContent = 'ClaudeWhat: explaining selection';
+  cwPanel.classList.remove('hidden');
+  requestExplanation(CW_INSTRUCTION);
 }
 
 function setCwButtonsEnabled(on) {
@@ -470,6 +523,257 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'PageDown') { e.preventDefault(); cwPage(1); return; }
 }, true);
 
+// ---------------------------------------------------------------------------
+// Verbose run: describe a task, run it headless, watch the critical steps
+// ---------------------------------------------------------------------------
+// Flow: Ctrl+Shift+R -> prompt box -> the task runs via `claude -p` in main,
+// which streams short "critical segment" callouts back. We reveal them one at a
+// time in a full-window panel, paced by a timer the student can skip with Next.
+// On any segment they can press ClaudeWhat to dig deeper; returning resets the
+// timer. Which segments have been ClaudeWhat'd is persisted across restarts.
+const vrPrompt = document.getElementById('vr-prompt');
+const vrInput = document.getElementById('vr-input');
+const vrGo = document.getElementById('vr-go');
+const vrCancelPrompt = document.getElementById('vr-cancel-prompt');
+const vrHistory = document.getElementById('vr-history');
+const vrPanel = document.getElementById('vr-panel');
+const vrLabel = document.getElementById('vr-label');
+const vrSnippet = document.getElementById('vr-snippet');
+const vrDetail = document.getElementById('vr-detail');
+const vrTimer = document.getElementById('vr-timer');
+const vrNext = document.getElementById('vr-next');
+const vrClaudeWhat = document.getElementById('vr-claudewhat');
+const vrExit = document.getElementById('vr-exit');
+
+// Queue + timer state for the reveal loop. `segments` is the arrival-ordered
+// list; `current` is the index showing now (-1 = none). `timer` is the 1s
+// countdown interval, `remaining` its seconds left. `runState` tracks the run.
+const vrState = {
+  runId: null, segments: [], current: -1,
+  timer: null, remaining: 0, runState: 'idle'
+};
+
+function vrIsPanelOpen() { return !vrPanel.classList.contains('hidden'); }
+
+// Stop the countdown without advancing.
+function vrClearTimer() {
+  if (vrState.timer) { clearInterval(vrState.timer); vrState.timer = null; }
+}
+
+// Show a one-line status in the body instead of a segment (waiting/finished).
+function vrShowMessage(text) {
+  vrClearTimer();
+  vrTimer.textContent = '';
+  vrLabel.textContent = text;
+  vrSnippet.textContent = '';
+  vrSnippet.style.display = 'none';
+  vrDetail.textContent = '';
+}
+
+// Render a segment and start its countdown from verboseTimerSec.
+function vrShowSegment(i) {
+  const seg = vrState.segments[i];
+  if (!seg) return;
+  vrState.current = i;
+  vrLabel.textContent = seg.label || '';
+  if (seg.snippet && seg.snippet.length) {
+    vrSnippet.textContent = seg.snippet;
+    vrSnippet.style.display = '';
+  } else {
+    vrSnippet.textContent = '';
+    vrSnippet.style.display = 'none';
+  }
+  vrDetail.textContent = seg.detail || '';
+  vrStartTimer();
+}
+
+// Begin (or restart) the 1s countdown for the current segment. At 0 we advance.
+function vrStartTimer() {
+  vrClearTimer();
+  vrState.remaining = APPEARANCE.verboseTimerSec;
+  vrTimer.textContent = vrState.remaining + 's';
+  vrState.timer = setInterval(() => {
+    vrState.remaining -= 1;
+    if (vrState.remaining <= 0) {
+      vrTimer.textContent = '0s';
+      vrAdvance();
+    } else {
+      vrTimer.textContent = vrState.remaining + 's';
+    }
+  }, 1000);
+}
+
+// Move to the next segment if one exists; otherwise show waiting/finished
+// depending on whether the run is still producing output.
+function vrAdvance() {
+  vrClearTimer();
+  const next = vrState.current + 1;
+  if (next < vrState.segments.length) {
+    vrShowSegment(next);
+  } else if (vrState.runState === 'running') {
+    vrShowMessage('Waiting for the next step.');
+  } else {
+    vrShowMessage('Finished. Return to your project when ready.');
+  }
+}
+
+// Build the history list: each run shows its task and segment labels. Visited
+// segments get the .vr-visited class. data-* attrs let markVisited find entries.
+function vrRenderHistory(runs) {
+  vrHistory.textContent = '';
+  if (!runs || !runs.length) return;
+  for (const run of runs) {
+    const runEl = document.createElement('div');
+    runEl.className = 'vr-history-run';
+    const taskEl = document.createElement('div');
+    taskEl.className = 'vr-history-task';
+    taskEl.textContent = run.task || '(untitled run)';
+    runEl.appendChild(taskEl);
+    const segs = run.segments || [];
+    for (const seg of segs) {
+      const segEl = document.createElement('div');
+      segEl.className = 'vr-history-seg' + (seg.visited ? ' vr-visited' : '');
+      segEl.dataset.runId = run.id;
+      segEl.dataset.index = seg.index;
+      segEl.textContent = seg.label || '(segment)';
+      runEl.appendChild(segEl);
+    }
+    vrHistory.appendChild(runEl);
+  }
+}
+
+// Add the visited mark to a segment's history entry, if it is on screen.
+function vrMarkHistoryVisited(runId, index) {
+  const entry = vrHistory.querySelector(
+    '.vr-history-seg[data-run-id="' + runId + '"][data-index="' + index + '"]'
+  );
+  if (entry) entry.classList.add('vr-visited');
+}
+
+// Open the prompt box, populate recent runs, focus the textarea.
+async function openVerbosePrompt() {
+  hideMenu();
+  let runs = [];
+  try {
+    // verboseHistoryLoad resolves to the runs ARRAY (see contract / main.js),
+    // not a { runs } wrapper.
+    const data = await veshell.verboseHistoryLoad();
+    runs = Array.isArray(data) ? data : (data && data.runs) ? data.runs : [];
+  } catch (_) { runs = []; }
+  vrRenderHistory(runs);
+  vrPrompt.classList.remove('hidden');
+  vrInput.focus();
+}
+
+function closeVerbosePrompt() {
+  vrPrompt.classList.add('hidden');
+}
+
+// Submit the prompt: start the run, switch to the panel, reset queue state.
+function vrSubmit() {
+  const task = (vrInput.value || '').trim();
+  if (!task) { showToast('Type a task first'); return; }
+  closeVerbosePrompt();
+  vrState.runId = null;
+  vrState.segments = [];
+  vrState.current = -1;
+  vrState.remaining = 0;
+  vrState.runState = 'running';
+  vrClearTimer();
+  vrPanel.classList.remove('hidden');
+  vrShowMessage('Working. The first critical step will appear shortly.');
+  veshell.verboseStart(task);
+}
+
+// Leave the panel: stop the run and the timer, refocus the terminal.
+function closeVerbosePanel() {
+  vrClearTimer();
+  try { veshell.verboseCancel(); } catch (_) {}
+  vrState.runState = 'idle';
+  vrPanel.classList.add('hidden');
+  term.focus();
+}
+
+// ClaudeWhat the current segment: pause, mark it visited, open ClaudeWhat
+// seeded with the segment text. On return, resume here and reset the timer.
+function vrClaudeWhatCurrent() {
+  const i = vrState.current;
+  const seg = vrState.segments[i];
+  if (!seg) return;
+  vrClearTimer();
+  if (vrState.runId != null) {
+    try { veshell.verboseMarkVisited(vrState.runId, i); } catch (_) {}
+    seg.visited = true;
+    vrMarkHistoryVisited(vrState.runId, i);
+  }
+  // When ClaudeWhat closes, come back to this segment with a fresh timer.
+  cwState.onClose = () => { vrStartTimer(); };
+  const parts = [seg.label, seg.snippet, seg.detail].filter((s) => s && s.length);
+  openClaudeWhatForText(parts.join('\n\n'));
+}
+
+// Incoming segment from main. Push it; if nothing is showing yet, show it now.
+veshell.onVerboseSegment((seg) => {
+  if (!seg) return;
+  if (vrState.runId == null && seg.runId != null) vrState.runId = seg.runId;
+  vrState.segments[seg.index] = {
+    label: seg.label, snippet: seg.snippet, detail: seg.detail, visited: false
+  };
+  // If the panel is parked on a waiting message (or showing nothing), reveal
+  // the first not-yet-shown segment.
+  if (vrIsPanelOpen() && vrState.current < 0) {
+    vrShowSegment(0);
+  } else if (vrIsPanelOpen() && vrState.current >= 0 &&
+             vrState.timer === null && vrState.runState === 'running') {
+    // We were parked on "Waiting for the next step." and a new one arrived.
+    const next = vrState.current + 1;
+    if (next < vrState.segments.length && next === seg.index) vrShowSegment(next);
+  }
+});
+
+veshell.onVerboseStatus((s) => {
+  if (!s) return;
+  if (s.runId != null) vrState.runId = s.runId;
+  vrState.runState = s.state;
+  if (s.state === 'error' && vrIsPanelOpen()) {
+    vrShowMessage('Could not complete the run.' + (s.error ? ' ' + s.error : ''));
+  } else if (s.state === 'done' && vrIsPanelOpen() &&
+             vrState.current < 0 && vrState.segments.length === 0) {
+    vrShowMessage('Finished with no critical steps to show.');
+  }
+});
+
+vrGo.addEventListener('click', vrSubmit);
+vrCancelPrompt.addEventListener('click', closeVerbosePrompt);
+vrNext.addEventListener('click', () => { if (vrState.current >= 0) vrAdvance(); });
+vrClaudeWhat.addEventListener('click', vrClaudeWhatCurrent);
+vrExit.addEventListener('click', closeVerbosePanel);
+
+// Ctrl+Enter submits from the textarea.
+vrInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    vrSubmit();
+  }
+});
+
+// Esc handling for the verbose surfaces. The ClaudeWhat capture-phase handler
+// already closes ClaudeWhat first when it is open, so only act here when it is
+// NOT open: close the prompt box, or exit the panel.
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (isClaudeWhatOpen()) return; // ClaudeWhat owns Esc while it is up
+  if (!vrPrompt.classList.contains('hidden')) {
+    e.preventDefault();
+    closeVerbosePrompt();
+    return;
+  }
+  if (vrIsPanelOpen()) {
+    e.preventDefault();
+    closeVerbosePanel();
+  }
+});
+
 // Debug/test hook, only exposed under the e2e flag, never in normal/prod use.
 // Lets the automated e2e driver reach the terminal and clipboard actions.
 if (veshell.e2e) {
@@ -497,6 +801,22 @@ if (veshell.e2e) {
     closeClaudeWhat: () => closeClaudeWhat(),
     cwBodyText: () => cwBody.textContent,
     cwContext: () => cwState.context,
-    cwScrapeContext: () => scrapeContext()
+    cwScrapeContext: () => scrapeContext(),
+    // Verbose run hooks for the e2e driver.
+    openVerbosePrompt: () => openVerbosePrompt(),
+    verboseStartTask: (t) => { vrInput.value = t; vrSubmit(); },
+    vrSegments: () => vrState.segments,
+    vrCurrent: () => vrState.current,
+    vrIsOpen: () => !vrPanel.classList.contains('hidden'),
+    vrMarkVisited: (i) => {
+      const seg = vrState.segments[i];
+      if (!seg) return;
+      if (vrState.runId != null) {
+        try { veshell.verboseMarkVisited(vrState.runId, i); } catch (_) {}
+        seg.visited = true;
+        vrMarkHistoryVisited(vrState.runId, i);
+      }
+    },
+    vrHistory: () => veshell.verboseHistoryLoad()
   };
 }

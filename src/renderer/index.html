@@ -20,6 +20,7 @@
     <div class="ctx-item" data-action="selectAll" role="menuitem">Select All<span class="ctx-key">Ctrl+Shift+A</span></div>
     <div class="ctx-sep"></div>
     <div class="ctx-item" data-action="claudewhat" role="menuitem">ClaudeWhat (explain selection)<span class="ctx-key">Ctrl+Shift+W</span></div>
+    <div class="ctx-item" data-action="verbose" role="menuitem">Run a task (Verbose)<span class="ctx-key">Ctrl+Shift+R</span></div>
     <div class="ctx-item" data-action="clear" role="menuitem">Clear<span class="ctx-key"></span></div>
     <div class="ctx-sep"></div>
     <div class="ctx-item" data-action="restart" role="menuitem">Restart Session<span class="ctx-key"></span></div>
@@ -39,6 +40,44 @@
       <button id="cw-return" class="cw-btn cw-btn-primary" title="Close and return (Esc)">Return to project</button>
     </div>
   </div>
+
+  <!-- Verbose run: prompt overlay where the student describes a task to run. -->
+  <div id="vr-prompt" class="vr-prompt hidden">
+    <div class="vr-prompt-box">
+      <div class="vr-prompt-title">Run a task</div>
+      <p class="vr-prompt-hint">Describe what you want done. You will see the
+         critical steps as they happen, and can pause to explore any of them.</p>
+      <textarea id="vr-input" class="vr-input" rows="3"
+        placeholder="e.g. write a Python script that reads scores.csv and prints the average"></textarea>
+      <div class="vr-prompt-actions">
+        <button id="vr-go" class="cw-btn cw-btn-primary">Run</button>
+        <button id="vr-cancel-prompt" class="cw-btn">Cancel</button>
+      </div>
+      <div class="vr-history-label">Recent runs</div>
+      <div id="vr-history" class="vr-history"></div>
+    </div>
+  </div>
+
+  <!-- Verbose run: full-window panel that reveals one critical segment at a
+       time, paced by a timer the student can bypass. -->
+  <div id="vr-panel" class="vr-panel hidden">
+    <div class="vr-panel-header"><span class="vr-panel-tag">Critical segment</span>
+      <span id="vr-timer" class="vr-timer"></span></div>
+    <div class="vr-panel-body">
+      <div id="vr-label" class="vr-label"></div>
+      <pre id="vr-snippet" class="vr-snippet"></pre>
+      <div id="vr-detail" class="vr-detail"></div>
+    </div>
+    <div class="vr-toolbar">
+      <button id="vr-claudewhat" class="cw-btn">ClaudeWhat this</button>
+      <button id="vr-next" class="cw-btn">Next</button>
+      <button id="vr-exit" class="cw-btn cw-btn-primary">Return to project</button>
+    </div>
+  </div>
+
+  <!-- Slim bottom status bar. Sits above the terminal but below the panels and
+       the session overlay, so those full-window surfaces cover it. -->
+  <div id="statusbar" class="statusbar"><span id="status-hint" class="status-hint"></span></div>
 
   <!-- Transient toast (Copied / Pasted / etc.) -->
   <div id="toast" class="toast hidden"></div>
