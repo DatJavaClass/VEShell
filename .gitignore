@@ -1,5 +1,7 @@
 node_modules/
-dist/
+dist/*
+!dist/VEShell-Setup-*.exe
+!dist/VEShell-Portable-*.exe
 *.log
 tests/*-result.json
 *.tmp.*
