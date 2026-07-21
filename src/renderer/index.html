@@ -26,8 +26,7 @@
     <div class="ctx-item" data-action="restart" role="menuitem">Restart Session<span class="ctx-key"></span></div>
   </div>
 
-  <!-- ClaudeWhat: a VEShell-owned panel showing a contextual explanation of
-       the selected snippet. The terminal stays untouched underneath. -->
+  <!-- ClaudeWhat panel; terminal stays untouched underneath. -->
   <div id="claudewhat" class="cw-panel hidden">
     <div class="cw-header">
       <span id="cw-title" class="cw-title">ClaudeWhat</span>
@@ -41,7 +40,7 @@
     </div>
   </div>
 
-  <!-- Verbose run: prompt overlay where the student describes a task to run. -->
+  <!-- Verbose run: task prompt overlay. -->
   <div id="vr-prompt" class="vr-prompt hidden">
     <div class="vr-prompt-box">
       <div class="vr-prompt-title">Run a task</div>
@@ -58,8 +57,7 @@
     </div>
   </div>
 
-  <!-- Verbose run: full-window panel that reveals one critical segment at a
-       time, paced by a timer the student can bypass. -->
+  <!-- Verbose run: timed one-segment reveal panel. -->
   <div id="vr-panel" class="vr-panel hidden">
     <div class="vr-panel-header"><span class="vr-panel-tag">Critical segment</span>
       <span id="vr-timer" class="vr-timer"></span></div>
@@ -75,8 +73,7 @@
     </div>
   </div>
 
-  <!-- Slim bottom status bar. Sits above the terminal but below the panels and
-       the session overlay, so those full-window surfaces cover it. -->
+  <!-- Status bar; panels and overlay cover it. -->
   <div id="statusbar" class="statusbar"><span id="status-hint" class="status-hint"></span></div>
 
   <!-- Transient toast (Copied / Pasted / etc.) -->

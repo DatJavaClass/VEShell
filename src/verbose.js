@@ -1,15 +1,10 @@
 'use strict';
 
-// ===========================================================================
-// Verbose run: headless `claude -p` task that streams critical-segment callouts
-// ===========================================================================
-// Like ClaudeWhat, the INSTRUCTION is a fixed argument and the variable content
-// (the task text) is fed on stdin and closed, so nothing user-typed lands on the
-// command line. Output is streamed: as each complete <<CW_SEGMENT>>..<<CW_END>>
-// callout arrives it is parsed and sent to the renderer, which paces the reveal.
+/* Verbose run: headless claude -p that streams critical-segment callouts.
+   Instruction is a fixed arg; task text goes on stdin (then closed). Each
+   complete <<CW_SEGMENT>>..<<CW_END>> callout is parsed and sent to the renderer. */
 
-const path = require('path');
-const fs = require('fs');
+const path = require('path'), fs = require('fs');
 const { StringDecoder } = require('string_decoder');
 
 const { spawnClaude, sanitizeText, resolveCwd } = require('./claude-proc');
@@ -17,8 +12,7 @@ const { parseSegments } = require('./verbose-parse');
 
 const VERBOSE_TIMEOUT = 300000;
 
-// Fixed argv instruction. Tells claude to do the task and emit callouts in the
-// exact <<CW_SEGMENT>>{json}<<CW_END>> format the parser expects.
+// Fixed instruction: do the task, emit callouts in the parser's format.
 const VERBOSE_INSTRUCTION = `You are completing a programming task for a beginning student, inside their
 project folder. The task itself is provided on stdin. Do the task fully and
 normally (read and edit files as needed).
@@ -37,17 +31,17 @@ language for a beginner: say what the code does, not who did it. Do not use the
 first person. Do not mention being an AI, model, or assistant. Do not use
 em-dashes. The JSON must be valid (escape quotes and newlines inside strings).`;
 
-// The single in-flight verbose child, so a new run (or cancel) can abort it.
+// Single in-flight child, so a new run or cancel aborts it.
 let verboseProc = null;
 
 // Wire the Verbose IPC channels. deps: { getMainWindow, app, config }.
 function register(ipcMain, deps) {
   const { getMainWindow, app, config } = deps;
 
-  // Path to the persisted run history (shared name with the ClaudeWhat era).
+  // Persisted run history path (legacy claudewhat name).
   const historyPath = () => path.join(app.getPath('userData'), 'claudewhat-history.json');
 
-  // Read the history file; missing or malformed file is treated as { runs: [] }.
+  // Read history; missing or malformed becomes { runs: [] }.
   const readHistory = () => {
     try {
       const parsed = JSON.parse(fs.readFileSync(historyPath(), 'utf8'));
@@ -56,8 +50,7 @@ function register(ipcMain, deps) {
     return { runs: [] };
   };
 
-  // Write history back, capped to the most recent 50 runs. Failures are ignored
-  // (a feature run must not crash on a read-only userData dir).
+  // Write history, capped to the most recent 50 runs; failures ignored.
   const writeHistory = (history) => {
     try {
       const runs = Array.isArray(history.runs) ? history.runs : [];
@@ -141,18 +134,13 @@ function register(ipcMain, deps) {
     }
     verboseProc = proc;
 
-    // State for the streamed parse: how many complete segments we have emitted,
-    // the unconsumed tail, the segments we have stored for history, and stderr.
-    let emitted = 0;
-    let pending = '';
-    const stored = [];
-    const errChunks = [];
-    // Decode stdout incrementally so a multibyte UTF-8 char split across chunks
-    // can't corrupt a callout.
+    // Stream-parse state: emitted count, unconsumed tail, stored segments, stderr.
+    let emitted = 0, pending = '';
+    const stored = [], errChunks = [];
+    // Incremental decode so a split multibyte char can't corrupt a callout.
     const decoder = new StringDecoder('utf8');
 
-    // Emit any parsed segments past the `emitted` watermark, storing each for
-    // history. Returns the new segment count so the caller can advance.
+    // Emit segments past the emitted watermark, storing each for history.
     const emitNew = (segments) => {
       for (let i = emitted; i < segments.length; i++) {
         const s = segments[i];
@@ -193,12 +181,12 @@ function register(ipcMain, deps) {
       clearTimeout(timer);
       if (verboseProc === proc) verboseProc = null;
 
-      // Flush any final bytes the decoder is holding and parse one last time.
+      // Flush the decoder's final bytes and parse once more.
       pending += decoder.end();
       const { segments } = parseSegments(pending);
       emitNew(segments);
 
-      // Persist the run (all segments, each visited:false).
+      // Persist the run (segments visited:false).
       const history = readHistory();
       history.runs.push({ id: runId, task: taskText, startedAt, segments: stored });
       writeHistory(history);
@@ -211,7 +199,7 @@ function register(ipcMain, deps) {
       }
     });
 
-    // Feed the task on stdin and close it so claude proceeds immediately.
+    // Feed the task on stdin and close so claude proceeds.
     try {
       proc.stdin.write(taskText);
       proc.stdin.end();

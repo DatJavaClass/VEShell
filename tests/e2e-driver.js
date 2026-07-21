@@ -1,12 +1,9 @@
 'use strict';
 
-// End-to-end driver for VEShell's clipboard / keyboard behavior. Loaded by
-// src/main.js only when VESHELL_E2E is set. It drives the REAL renderer
-// (xterm.js + the real key handlers) through executeJavaScript and verifies
-// data actually moves through the Electron clipboard and into the pty.
-//
-// Run via tests/run-e2e.cmd (sets a plain-powershell shell so the prompt
-// echoes pasted text).
+/* E2E driver for VEShell clipboard/keyboard. Loaded by main.js only when
+   VESHELL_E2E is set; drives the real renderer via executeJavaScript and checks
+   data moves through the Electron clipboard and into the pty. Run via
+   tests/run-e2e.cmd (plain-powershell shell so the prompt echoes pastes). */
 
 module.exports = function ({ app, mainWindow, clipboard, getPty }) {
   const wc = mainWindow.webContents;
@@ -22,17 +19,15 @@ module.exports = function ({ app, mainWindow, clipboard, getPty }) {
     console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
   }
 
-  // Dispatch a synthetic keydown on xterm's input textarea (exercises the real
-  // attachCustomKeyEventHandler path).
+  // Synthetic keydown on xterm's textarea (real attachCustomKeyEventHandler path).
   function key(k, mods = {}) {
     const opts = JSON.stringify({
       key: k, code: 'Key' + k.toUpperCase(),
       ctrlKey: !!mods.ctrl, shiftKey: !!mods.shift, altKey: !!mods.alt,
       bubbles: true, cancelable: true
     });
-    // Returns event.defaultPrevented so tests can confirm our handler called
-    // preventDefault() — the thing that stops the browser's native paste/copy
-    // default action from firing a second time (the double-paste bug).
+    /* Returns defaultPrevented so tests confirm our handler called
+       preventDefault(), which stops the native paste/copy (the double-paste bug). */
     return exec(`(() => {
       const ev = new KeyboardEvent('keydown', ${opts});
       window.__veshell.textarea.dispatchEvent(ev);
@@ -153,9 +148,8 @@ module.exports = function ({ app, mainWindow, clipboard, getPty }) {
     }
 
     // --- 5b. Paste/copy shortcuts call preventDefault (no native double-paste) -
-    // Regression guard for the double-paste bug: a real Ctrl+V triggers both our
-    // handler AND the browser's native paste unless we preventDefault. Synthetic
-    // events can't fire the native default, so we assert defaultPrevented here.
+    /* Double-paste guard: a real Ctrl+V fires our handler AND native paste unless
+       we preventDefault. Synthetic events can't, so we assert defaultPrevented. */
     {
       const vCtrl = await key('v', { ctrl: true });
       const vCtrlShift = await key('v', { ctrl: true, shift: true });
@@ -268,14 +262,12 @@ module.exports = function ({ app, mainWindow, clipboard, getPty }) {
     }
 
     // --- 13. Window resize propagates new column count to the pty ------------
-    // Verifies the full real chain: window resize -> renderer fit -> term
-    // onResize -> resize IPC -> main pty.resize(). node-pty's proc exposes its
-    // live .cols/.rows, so we assert the pty actually received the new grid
-    // (no fragile PowerShell parsing — PSReadLine mangles fed-in brackets).
+    /* Full chain: window resize -> fit -> term onResize -> IPC -> pty.resize().
+       Assert the pty's live .cols/.rows match (PSReadLine mangles fed-in brackets). */
     {
       const before = await exec('window.__veshell.dims()');
       mainWindow.setContentSize(820, 560);
-      await sleep(400);              // debounced fit (60ms) + resize IPC
+      await sleep(400); // debounced fit (60ms) + resize IPC
       mainWindow.setContentSize(1180, 760);
       await sleep(500);
       const after = await exec('window.__veshell.dims()');

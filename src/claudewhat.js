@@ -1,22 +1,17 @@
 'use strict';
 
-// ===========================================================================
-// ClaudeWhat: explain a selected snippet in the context of the terminal.
-// A one-shot `claude -p` call. The INSTRUCTION is a fixed argument (no user
-// text on the command line, so nothing to shell-escape); all variable content
-// (the selection + surrounding transcript) is fed on stdin, which we then close
-// so claude doesn't wait for more. Output is plain text (no ANSI in -p mode).
-// ===========================================================================
+/* ClaudeWhat: explain a selected snippet in terminal context. One-shot
+   claude -p; the instruction is a fixed arg, variable content goes on stdin
+   (then closed). Output is plain text (no ANSI in -p mode). */
 
 const { spawnClaude, sanitizeText } = require('./claude-proc');
 
 const CLAUDE_WHAT_TIMEOUT = 90000;
 
-// The single in-flight ClaudeWhat child, so closing the panel can abort it and
-// stop wasting a generation/quota on a result nobody will see.
+// Single in-flight child, so closing the panel aborts it and saves quota.
 let claudeWhatProc = null;
 
-// instruction: the fixed teaching prompt. context: the transcript+selection.
+// instruction: fixed teaching prompt. context: transcript + selection.
 function runClaudeWhat(instruction, context) {
   return new Promise((resolve) => {
     let proc;
@@ -27,13 +22,11 @@ function runClaudeWhat(instruction, context) {
       return;
     }
 
-    // Replace any prior in-flight child (shouldn't happen with the renderer's
-    // busy guard, but stay safe) and register this one for cancellation.
+    // Replace any prior child and register this one for cancellation.
     if (claudeWhatProc) { try { claudeWhatProc.kill(); } catch (_) {} }
     claudeWhatProc = proc;
 
-    const outChunks = [];
-    const errChunks = [];
+    const outChunks = [], errChunks = [];
     let settled = false;
     const finish = (result) => { if (!settled) { settled = true; resolve(result); } };
 
@@ -42,8 +35,7 @@ function runClaudeWhat(instruction, context) {
       finish({ ok: false, error: 'Timed out waiting for an explanation.' });
     }, CLAUDE_WHAT_TIMEOUT);
 
-    // Accumulate raw Buffers and decode once, so a multibyte UTF-8 char split
-    // across two data events (em-dash, curly quote) can't corrupt.
+    // Buffer raw and decode once; a multibyte char can split across events.
     proc.stdout.on('data', (d) => { outChunks.push(d); });
     proc.stderr.on('data', (d) => { errChunks.push(d); });
 
@@ -62,17 +54,17 @@ function runClaudeWhat(instruction, context) {
       if (code === 0 && text) {
         finish({ ok: true, text });
       } else if (text) {
-        finish({ ok: true, text });           // non-zero but produced output
+        finish({ ok: true, text }); // non-zero but produced output
       } else {
         finish({ ok: false, error: sanitizeText(err).trim() || ('claude exited with code ' + code) });
       }
     });
 
-    // Feed context on stdin and close it so claude proceeds immediately.
+    // Feed context on stdin and close so claude proceeds immediately.
     try {
       proc.stdin.write(context || '');
       proc.stdin.end();
-    } catch (_) { /* if stdin is gone, the close handler still resolves */ }
+    } catch (_) { /* stdin gone; the close handler still resolves */ }
   });
 }
 
@@ -86,9 +78,7 @@ function register(ipcMain) {
     return runClaudeWhat(instruction, context);
   });
 
-  // Abort the in-flight explanation (user closed the panel). The pending
-  // explain promise still resolves, but the renderer ignores a result for a
-  // closed panel, and we stop burning the generation here.
+  // Abort the in-flight explanation; renderer ignores a closed-panel result.
   ipcMain.on('claudewhat:cancel', () => {
     if (claudeWhatProc) {
       try { claudeWhatProc.kill(); } catch (_) {}

@@ -1,10 +1,8 @@
 'use strict';
 
-// Headless unit test for parseSegments (src/verbose-parse.js). Pure JS, no
-// node-pty/Electron deps, so plain `node` works; the .cmd runner mirrors the
-// other suites (Electron ABI) for consistency. Covers complete callouts,
-// incomplete trailing tails, split-across-chunks streaming, malformed-JSON
-// title fallback, and missing optional fields defaulting to ''.
+/* Headless unit test for parseSegments (src/verbose-parse.js). Pure JS, no
+   node-pty/Electron deps. Covers complete callouts, incomplete tails, split
+   streaming, malformed-JSON title fallback, and missing-field defaults. */
 
 const path = require('path');
 const { parseSegments } = require(path.join(__dirname, '..', 'src', 'verbose-parse.js'));
@@ -15,8 +13,7 @@ function record(name, ok, detail) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
 }
 
-// Tiny assert helper that records one PASS/FAIL line per test and captures the
-// first failing expectation as detail.
+// Assert helper: one PASS/FAIL line per test, first failure as detail.
 function check(name, fn) {
   try {
     fn();
@@ -40,8 +37,7 @@ function wrap(jsonStr) {
 
 // 1. Two complete callouts in one string -> 2 segments, rest === ''.
 check('1. two complete callouts -> 2 segments, rest empty', () => {
-  // rest is everything after the LAST <<CW_END>> (contract rule), so the string
-  // ends right at the second callout's close marker -> rest must be ''.
+  // rest is everything after the LAST <<CW_END>>, so here rest === ''.
   const text =
     'noise before ' +
     wrap(seg('Read CSV', 'open(path)', 'Loads the file.')) +
@@ -54,8 +50,7 @@ check('1. two complete callouts -> 2 segments, rest empty', () => {
   eq(rest, '', 'rest');
 });
 
-// 2. One complete callout + incomplete trailing <<CW_SEGMENT>>{... (no
-//    <<CW_END>>) -> 1 segment, rest === the incomplete tail.
+// 2. Complete + incomplete trailing callout -> 1 segment, rest === the tail.
 check('2. complete + incomplete tail -> 1 segment, rest is the tail', () => {
   const tail = '<<CW_SEGMENT>>{"label":"Partial","snip';
   const text = wrap(seg('Done', '', 'First part finished.')) + tail;
@@ -65,8 +60,7 @@ check('2. complete + incomplete tail -> 1 segment, rest is the tail', () => {
   eq(rest, tail, 'rest holds incomplete tail');
 });
 
-// 3. A callout streamed in two halves. First half alone yields 0 segments and
-//    rest === firstHalf; rest+secondHalf then yields the full segment.
+// 3. Callout split in two halves; assembles on the second pass.
 check('3. split-across-chunks callout assembles on second chunk', () => {
   const full = wrap(seg('Streamed', 'x = 1', 'Built across two reads.'));
   const mid = Math.floor(full.length / 2);
@@ -83,8 +77,7 @@ check('3. split-across-chunks callout assembles on second chunk', () => {
   eq(r2.rest, '', 'second-pass rest empty');
 });
 
-// 4. Malformed JSON between markers -> 1 segment via the title fallback:
-//    label = trimmed inner truncated to 80 chars, snippet/detail ''.
+// 4. Malformed JSON -> title fallback: trimmed inner capped at 80, empty rest.
 check('4. malformed JSON -> title fallback (trimmed inner, empty snippet/detail)', () => {
   const inner = '   this is not valid json {oops   ';
   const text = `<<CW_SEGMENT>>${inner}<<CW_END>>`;

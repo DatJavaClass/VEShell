@@ -1,17 +1,16 @@
 'use strict';
 
-// ===========================================================================
-// VEShell renderer. Builds the xterm.js terminal, wires it to the pty over the
-// `veshell` bridge, and implements all the UI: copy/paste/cut, the right-click
-// menu, session-restart overlay, toast, and the ClaudeWhat panel. It is
-// sandboxed (no Node, strict CSP), so anything privileged goes through `veshell`.
-// ===========================================================================
+/* VEShell renderer: xterm.js UI, clipboard, menus, ClaudeWhat and Verbose
+   panels. Sandboxed (no Node, strict CSP); privileged work goes via `veshell`. */
 
 /* global Terminal, FitAddon, WebLinksAddon, veshell */
 
-// ---------------------------------------------------------------------------
-// Appearance (edit here to taste; shell/cwd live in config.json on the main side)
-// ---------------------------------------------------------------------------
+const $ = (id) => document.getElementById(id);
+const isHidden = (el) => el.classList.contains('hidden');
+const show = (el) => el.classList.remove('hidden');
+const hide = (el) => el.classList.add('hidden');
+
+// Appearance lives here; shell/cwd live in config.json on the main side.
 const APPEARANCE = {
   fontFamily: 'Cascadia Mono, Consolas, "Courier New", monospace',
   fontSize: 14,
@@ -33,9 +32,8 @@ const THEME = {
   brightCyan: '#29b8db', brightWhite: '#ffffff'
 };
 
-// ---------------------------------------------------------------------------
-// Terminal setup
-// ---------------------------------------------------------------------------
+// Terminal setup.
+
 const term = new Terminal({
   fontFamily: APPEARANCE.fontFamily,
   fontSize: APPEARANCE.fontSize,
@@ -53,7 +51,7 @@ try {
   term.loadAddon(new WebLinksAddon.WebLinksAddon());
 } catch (_) { /* web-links optional */ }
 
-const termEl = document.getElementById('terminal');
+const termEl = $('terminal');
 term.open(termEl);
 
 function safeFit() {
@@ -61,29 +59,23 @@ function safeFit() {
 }
 
 safeFit();
-// Refit once more after layout settles so xterm accounts for the bottom status
-// bar's reserved height (the #terminal bottom inset). Avoids a clipped last row.
-requestAnimationFrame(() => safeFit());
+requestAnimationFrame(() => safeFit()); // refit once layout settles; status bar inset
 term.focus();
 
-// Hand the pty its starting dimensions and let main spawn the session.
-veshell.ready({ cols: term.cols, rows: term.rows });
+veshell.ready({ cols: term.cols, rows: term.rows }); // main spawns the session
 
-// ---------------------------------------------------------------------------
-// pty <-> terminal data flow
-// ---------------------------------------------------------------------------
+// pty <-> terminal data flow.
+
 veshell.onData((data) => term.write(data));
 
 term.onData((data) => veshell.sendInput(data));
 
-// Keep the pty's view of the window in sync with xterm's grid.
-term.onResize(({ cols, rows }) => veshell.resize(cols, rows));
+term.onResize(({ cols, rows }) => veshell.resize(cols, rows)); // keep pty in sync
 
-// ---------------------------------------------------------------------------
-// Clipboard actions
-// ---------------------------------------------------------------------------
-// Copy the current selection to the OS clipboard (via main). Returns false if
-// nothing is selected, which the smart-Ctrl+C path uses to fall through to ^C.
+// Clipboard actions.
+
+/* Copy the selection via main. False when nothing selected;
+   smart-Ctrl+C uses that to fall through to ^C. */
 async function doCopy(clearAfter) {
   const sel = term.getSelection();
   if (sel && sel.length) {
@@ -95,75 +87,58 @@ async function doCopy(clearAfter) {
   return false;
 }
 
-// "Cut" on terminal output can only copy; scrollback text cannot be removed.
+// Scrollback can't be removed, so cut just copies.
 async function doCut() {
   const ok = await doCopy(true);
   if (ok) showToast('Cut (copied)');
 }
 
-// Paste clipboard text into the terminal. Uses xterm's bracketed-paste-aware
-// term.paste so multiline content lands as one block in Claude's prompt.
 async function doPaste() {
   const text = await veshell.paste();
   if (text && text.length) {
-    // Strip NUL bytes (never valid terminal input); keep everything else so
-    // bracketed paste can wrap multiline content faithfully.
-    const clean = text.replace(/\x00/g, '');
+    const clean = text.replace(/\x00/g, ''); // NUL is never valid input
     if (!clean.length) return;
-    // term.paste respects bracketed-paste mode, so multiline pastes land in
-    // Claude's prompt / readline correctly instead of executing line-by-line.
+    // term.paste is bracketed-paste aware; multiline lands as one block.
     term.paste(clean);
     showToast('Pasted');
   }
 }
 
-// ---------------------------------------------------------------------------
-// Keyboard: intercept copy/paste/cut/select-all before xterm forwards to pty
-// ---------------------------------------------------------------------------
+// Keyboard: intercept copy/paste/cut/select-all before xterm forwards to pty.
+
 term.attachCustomKeyEventHandler((e) => {
   if (e.type !== 'keydown') return true;
 
-  const ctrl = e.ctrlKey;
-  const shift = e.shiftKey;
-  const alt = e.altKey;
+  const ctrl = e.ctrlKey, shift = e.shiftKey, alt = e.altKey;
   const key = (e.key || '').toLowerCase();
 
-  // When we handle a shortcut ourselves we MUST preventDefault, otherwise the
-  // browser's native copy/paste default action ALSO fires (xterm has its own
-  // 'paste'/'copy' DOM handlers) and we'd paste/copy twice. Returning false
-  // only tells xterm to skip the key, it does not stop the default action.
+  /* preventDefault is mandatory here: xterm has its own copy/paste DOM
+     handlers, and letting the default fire too would paste/copy twice. */
   const handle = (fn) => { e.preventDefault(); fn(); return false; };
 
-  // Explicit, always-on shortcuts (never ambiguous with terminal control codes).
+  // Explicit shortcuts, never ambiguous with terminal control codes.
   if (ctrl && shift && key === 'c') return handle(() => doCopy(false));
   if (ctrl && shift && key === 'v') return handle(() => doPaste());
   if (ctrl && shift && key === 'x') return handle(() => doCut());
   if (ctrl && shift && key === 'a') return handle(() => term.selectAll());
-
-  // Ctrl+Shift+W: ClaudeWhat, explain the current selection in context.
   if (ctrl && shift && key === 'w') return handle(() => openClaudeWhat());
-
-  // Ctrl+Shift+R: Verbose run, describe a task and watch its critical steps.
   if (ctrl && shift && key === 'r') return handle(() => openVerbosePrompt());
 
-  // Smart Ctrl+C: copy when there's a real (non-empty) selection, otherwise
-  // send interrupt (^C). Gate on getSelection().length, not hasSelection(),
-  // so a whitespace-only "phantom" selection can't swallow the interrupt.
+  /* Smart Ctrl+C: copy a real selection, else interrupt. Gate on
+     getSelection().length so a phantom selection can't swallow ^C. */
   if (ctrl && !shift && !alt && key === 'c') {
     const sel = term.getSelection();
     if (sel && sel.length) return handle(() => doCopy(true));
-    return true; // let xterm send \x03 to Claude
+    return true; // let xterm send \x03
   }
 
-  // Ctrl+V: paste.
   if (ctrl && !shift && !alt && key === 'v') return handle(() => doPaste());
 
   return true;
 });
 
-// ---------------------------------------------------------------------------
-// Mouse: copy-on-select (optional), middle-click paste, right-click menu
-// ---------------------------------------------------------------------------
+// Mouse: copy-on-select (optional), middle-click paste, right-click menu.
+
 if (APPEARANCE.copyOnSelect) {
   term.onSelectionChange(() => {
     const sel = term.getSelection();
@@ -171,28 +146,24 @@ if (APPEARANCE.copyOnSelect) {
   });
 }
 
-// Middle-click paste (X11 convention; handy and predictable).
 termEl.addEventListener('mousedown', (e) => {
-  if (e.button === 1) {
+  if (e.button === 1) { // middle-click paste, X11 style
     e.preventDefault();
     doPaste();
   }
 });
 
-// ---------------------------------------------------------------------------
-// Context menu
-// ---------------------------------------------------------------------------
-const menu = document.getElementById('context-menu');
+// Context menu.
 
-// Show the right-click menu at (x,y), greying out copy/cut when there's no
-// selection, and clamped so it never spills outside the window.
+const menu = $('context-menu');
+
+// Show at (x,y), grey out copy/cut without a selection, clamp to viewport.
 function showMenu(x, y) {
   const hasSel = term.hasSelection();
   menu.querySelector('[data-action="copy"]').classList.toggle('disabled', !hasSel);
   menu.querySelector('[data-action="cut"]').classList.toggle('disabled', !hasSel);
 
-  menu.classList.remove('hidden');
-  // Clamp to viewport.
+  show(menu);
   const rect = menu.getBoundingClientRect();
   const px = Math.min(x, window.innerWidth - rect.width - 4);
   const py = Math.min(y, window.innerHeight - rect.height - 4);
@@ -200,7 +171,7 @@ function showMenu(x, y) {
   menu.style.top = py + 'px';
 }
 
-function hideMenu() { menu.classList.add('hidden'); }
+function hideMenu() { hide(menu); }
 
 termEl.addEventListener('contextmenu', (e) => {
   e.preventDefault();
@@ -217,15 +188,15 @@ menu.addEventListener('click', (e) => {
     case 'cut': doCut(); break;
     case 'paste': doPaste(); break;
     case 'selectAll': term.selectAll(); break;
-    case 'claudewhat': openClaudeWhat(); return; // panel takes focus; don't refocus term
-    case 'verbose': openVerbosePrompt(); return; // panel takes focus; don't refocus term
+    case 'claudewhat': openClaudeWhat(); return; // panel takes focus
+    case 'verbose': openVerbosePrompt(); return; // panel takes focus
     case 'clear': term.clear(); break;
     case 'restart': restartSession(); break;
   }
   term.focus();
 });
 
-// Dismiss the menu on any outside interaction.
+// Any outside interaction dismisses the menu.
 window.addEventListener('mousedown', (e) => {
   if (!menu.contains(e.target)) hideMenu();
 });
@@ -234,33 +205,28 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('blur', hideMenu);
 
-// ---------------------------------------------------------------------------
-// Resize handling
-// ---------------------------------------------------------------------------
+// Resize handling.
+
 let resizeTimer = null;
 window.addEventListener('resize', () => {
   if (resizeTimer) clearTimeout(resizeTimer);
   resizeTimer = setTimeout(safeFit, 60);
 });
 
-// Refit once fonts are loaded (avoids an initial off-by-a-row grid).
+// Refit after fonts load; dodges an off-by-a-row first grid.
 if (document.fonts && document.fonts.ready) {
   document.fonts.ready.then(() => safeFit());
 }
 
-// ---------------------------------------------------------------------------
-// Session end / restart
-// ---------------------------------------------------------------------------
-const overlay = document.getElementById('overlay');
-const overlayMsg = document.getElementById('overlay-msg');
+// Session end / restart.
 
-// Tear down the dead terminal view and ask main to spawn a fresh session at the
-// current grid size (used by the overlay button and the menu's Restart item).
+const overlay = $('overlay'), overlayMsg = $('overlay-msg');
+
+// Reset the dead view, ask main for a fresh session at the current grid.
 function restartSession() {
-  overlay.classList.add('hidden');
+  hide(overlay);
   term.reset();
   safeFit();
-  // Pass the current grid so the new pty starts at the right size.
   veshell.restart({ cols: term.cols, rows: term.rows });
   term.focus();
 }
@@ -270,23 +236,21 @@ veshell.onExit((info) => {
   overlayMsg.textContent = error
     ? error
     : `Session ended (exit code ${exitCode}).`;
-  overlay.classList.remove('hidden');
+  show(overlay);
 });
 
-document.getElementById('overlay-restart').addEventListener('click', restartSession);
+$('overlay-restart').addEventListener('click', restartSession);
 window.addEventListener('keydown', (e) => {
-  if (!overlay.classList.contains('hidden') && e.key === 'Enter') {
+  if (!isHidden(overlay) && e.key === 'Enter') {
     e.preventDefault();
     restartSession();
   }
 });
 
-// ---------------------------------------------------------------------------
-// Toast
-// ---------------------------------------------------------------------------
-const toastEl = document.getElementById('toast');
-let toastTimer = null;
-let toastFadeTimer = null;
+// Toast.
+
+const toastEl = $('toast');
+let toastTimer = null, toastFadeTimer = null;
 
 function showToast(text) {
   toastEl.textContent = text;
@@ -295,18 +259,14 @@ function showToast(text) {
   if (toastFadeTimer) clearTimeout(toastFadeTimer);
   toastTimer = setTimeout(() => {
     toastEl.classList.add('fade');
-    toastFadeTimer = setTimeout(() => toastEl.classList.add('hidden'), 260);
+    toastFadeTimer = setTimeout(() => hide(toastEl), 260);
   }, 900);
 }
 
-// ---------------------------------------------------------------------------
-// Status bar hint
-// ---------------------------------------------------------------------------
-// The bottom bar shows one hint at a time on its right side, alternating
-// between the two shortcuts every few seconds. "ExplainPlease" is the bar's
-// label for the ClaudeWhat feature; the feature is named ClaudeWhat everywhere
-// else (menu, panel, button) and in code.
-const statusHintEl = document.getElementById('status-hint');
+/* Status bar hint. The bar says "ExplainPlease"; everywhere else the
+   feature keeps its ClaudeWhat name. Deliberate. */
+
+const statusHintEl = $('status-hint');
 const STATUS_HINTS = [
   'Ctrl+Shift+R  ·  Verbose mode',
   'Ctrl+Shift+W  ·  ExplainPlease'
@@ -321,32 +281,21 @@ function showStatusHint() {
 showStatusHint();
 setInterval(showStatusHint, 4500);
 
-// Keep focus on the terminal when clicking in the window, but not while the
-// context menu or the session-ended overlay is up (don't steal their clicks).
+// Click refocuses the terminal unless a surface is up (don't steal clicks).
 window.addEventListener('mouseup', () => {
-  if (menu.classList.contains('hidden') &&
-      overlay.classList.contains('hidden') &&
-      cwPanel.classList.contains('hidden') &&
-      vrPanel.classList.contains('hidden') &&
-      vrPrompt.classList.contains('hidden')) {
+  if (isHidden(menu) && isHidden(overlay) && isHidden(cwPanel) &&
+      isHidden(vrPanel) && isHidden(vrPrompt)) {
     term.focus();
   }
 });
 
-// ---------------------------------------------------------------------------
-// ClaudeWhat: explain a selected snippet in the context of the terminal
-// ---------------------------------------------------------------------------
-// Flow: user selects text in a response -> Ctrl+Shift+W -> VEShell scrapes the
-// selection plus surrounding scrollback, asks `claude -p` (in the main process)
-// for a teaching explanation, and shows it in this panel. Everything stays in
-// VEShell; nothing is injected into Claude's live TUI.
-const cwPanel = document.getElementById('claudewhat');
-const cwBody = document.getElementById('cw-body');
-const cwTitle = document.getElementById('cw-title');
-const cwBtnUp = document.getElementById('cw-pageup');
-const cwBtnDown = document.getElementById('cw-pagedown');
-const cwBtnMore = document.getElementById('cw-more');
-const cwBtnReturn = document.getElementById('cw-return');
+/* ClaudeWhat: explain a selected snippet in terminal context.
+   Selection + scrollback go to `claude -p` in main; the answer lands in this
+   panel. Nothing is injected into Claude's live TUI. */
+
+const cwPanel = $('claudewhat'), cwBody = $('cw-body'), cwTitle = $('cw-title');
+const cwBtnUp = $('cw-pageup'), cwBtnDown = $('cw-pagedown'),
+      cwBtnMore = $('cw-more'), cwBtnReturn = $('cw-return');
 
 const CW_INSTRUCTION =
   'You are a teaching assistant embedded in a terminal. The user is learning ' +
@@ -363,23 +312,20 @@ const CW_MORE_INSTRUCTION =
   'alternatives, and the underlying concept, still aimed at a learner. Plain ' +
   'text only, no markdown headers.';
 
-// How many lines of scrollback above the selection to include, so the prompt
-// that caused a response is captured (that is what makes "why" answerable).
+/* Scrollback window around the selection; the lines above it are what
+   make "why" answerable. */
 const CW_CONTEXT_BEFORE = 60;
 const CW_CONTEXT_AFTER = 10;
 
-// onClose: optional callback. When set, closeClaudeWhat() calls it instead of
-// refocusing the terminal. Verbose run uses this to resume its panel.
+/* onClose: when set, closeClaudeWhat() calls it instead of refocusing the
+   terminal. Verbose run uses it to resume its panel. */
 const cwState = { selection: '', context: '', busy: false, onClose: null };
 
-// Read the visible+nearby buffer as plain text, and find a window around the
-// selection. xterm exposes the active buffer; we translate rows to strings.
+/* Window the active buffer around the selection (absolute rows, so scroll
+   position doesn't matter); fall back to the viewport bottom. */
 function scrapeContext() {
   const buf = term.buffer.active;
   const total = buf.length;
-  // Anchor the window on the SELECTION when we can (its y values are absolute
-  // buffer rows, so this works even if the user scrolled), capturing the lines
-  // above it that explain "why". Fall back to the viewport bottom otherwise.
   let anchorTop, anchorBottom;
   let selPos = null;
   try { selPos = term.getSelectionPosition(); } catch (_) { selPos = null; }
@@ -398,14 +344,12 @@ function scrapeContext() {
     const line = buf.getLine(i);
     if (line) lines.push(line.translateToString(true).replace(/\s+$/g, ''));
   }
-  // Trim leading/trailing blank lines.
   while (lines.length && !lines[0].trim()) lines.shift();
   while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
   return lines.join('\n');
 }
 
-// Assemble the stdin payload for claude -p: the scraped transcript plus the
-// highlighted selection, clearly delimited so the model knows what to explain.
+// Stdin payload: transcript plus selection, clearly delimited.
 function buildContextPayload(selection, transcript) {
   return [
     'TERMINAL CONTEXT (recent lines on screen):',
@@ -418,7 +362,7 @@ function buildContextPayload(selection, transcript) {
   ].join('\n');
 }
 
-function isClaudeWhatOpen() { return !cwPanel.classList.contains('hidden'); }
+function isClaudeWhatOpen() { return !isHidden(cwPanel); }
 
 function openClaudeWhat() {
   const sel = term.getSelection();
@@ -429,17 +373,16 @@ function openClaudeWhat() {
   cwState.selection = sel.trim();
   cwState.context = buildContextPayload(cwState.selection, scrapeContext());
   cwTitle.textContent = 'ClaudeWhat: explaining selection';
-  cwPanel.classList.remove('hidden');
+  show(cwPanel);
   requestExplanation(CW_INSTRUCTION);
 }
 
 function closeClaudeWhat() {
-  cwPanel.classList.add('hidden');
-  // Abort any in-flight explanation so it doesn't burn a generation we'll drop.
+  hide(cwPanel);
+  // Abort in-flight work; no point burning a generation we'll drop.
   if (cwState.busy) { try { veshell.claudeWhatCancel(); } catch (_) {} }
   cwState.busy = false;
-  // If a caller wired up an onClose hook (e.g. verbose run), let it resume
-  // instead of refocusing the terminal. The hook owns focus from here.
+  // An onClose hook (verbose run) owns focus from here.
   if (cwState.onClose) {
     const cb = cwState.onClose;
     cwState.onClose = null;
@@ -449,14 +392,12 @@ function closeClaudeWhat() {
   term.focus();
 }
 
-// Open ClaudeWhat seeded with arbitrary text (used by verbose run to explain a
-// callout). Mirrors openClaudeWhat from cwTitle onward, but takes its selection
-// and context from the passed text rather than the terminal selection.
+// Same panel, seeded from passed text instead of the terminal selection.
 function openClaudeWhatForText(text) {
   cwState.selection = text;
   cwState.context = buildContextPayload(text, '(from a verbose-run callout)');
   cwTitle.textContent = 'ClaudeWhat: explaining selection';
-  cwPanel.classList.remove('hidden');
+  show(cwPanel);
   requestExplanation(CW_INSTRUCTION);
 }
 
@@ -466,9 +407,8 @@ function setCwButtonsEnabled(on) {
   }
 }
 
-// Drive one explanation round-trip: show "Thinking…", call main's claude -p,
-// then render the result (or an error) into the panel body. The busy flag
-// blocks overlapping calls; if the user closed the panel mid-wait we bail.
+/* One explanation round-trip. busy blocks overlaps; a closed panel drops
+   the result on the floor. */
 async function requestExplanation(instruction) {
   if (cwState.busy) return;
   cwState.busy = true;
@@ -482,7 +422,7 @@ async function requestExplanation(instruction) {
     res = { ok: false, error: 'Request failed.' };
   }
   cwState.busy = false;
-  if (!isClaudeWhatOpen()) return; // user closed it while waiting
+  if (!isClaudeWhatOpen()) return;
   if (res && res.ok) {
     cwBody.textContent = res.text;
   } else {
@@ -494,7 +434,7 @@ async function requestExplanation(instruction) {
   updateCwPageButtons();
 }
 
-// Page the explanation body by ~90% of its visible height.
+// Page by ~90% of the visible height.
 function cwPage(dir) {
   const step = Math.max(40, Math.floor(cwBody.clientHeight * 0.9));
   cwBody.scrollTop += dir * step;
@@ -514,8 +454,7 @@ cwBtnMore.addEventListener('click', () => { if (!cwBtnMore.classList.contains('d
 cwBtnReturn.addEventListener('click', () => closeClaudeWhat());
 cwBody.addEventListener('scroll', updateCwPageButtons);
 
-// Panel key handling: PageUp/PageDown scroll, Esc returns. Capture-phase so it
-// wins before anything else while the panel is open.
+// Capture-phase so the panel wins the keys while it is open.
 window.addEventListener('keydown', (e) => {
   if (!isClaudeWhatOpen()) return;
   if (e.key === 'Escape') { e.preventDefault(); closeClaudeWhat(); return; }
@@ -523,44 +462,31 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'PageDown') { e.preventDefault(); cwPage(1); return; }
 }, true);
 
-// ---------------------------------------------------------------------------
-// Verbose run: describe a task, run it headless, watch the critical steps
-// ---------------------------------------------------------------------------
-// Flow: Ctrl+Shift+R -> prompt box -> the task runs via `claude -p` in main,
-// which streams short "critical segment" callouts back. We reveal them one at a
-// time in a full-window panel, paced by a timer the student can skip with Next.
-// On any segment they can press ClaudeWhat to dig deeper; returning resets the
-// timer. Which segments have been ClaudeWhat'd is persisted across restarts.
-const vrPrompt = document.getElementById('vr-prompt');
-const vrInput = document.getElementById('vr-input');
-const vrGo = document.getElementById('vr-go');
-const vrCancelPrompt = document.getElementById('vr-cancel-prompt');
-const vrHistory = document.getElementById('vr-history');
-const vrPanel = document.getElementById('vr-panel');
-const vrLabel = document.getElementById('vr-label');
-const vrSnippet = document.getElementById('vr-snippet');
-const vrDetail = document.getElementById('vr-detail');
-const vrTimer = document.getElementById('vr-timer');
-const vrNext = document.getElementById('vr-next');
-const vrClaudeWhat = document.getElementById('vr-claudewhat');
-const vrExit = document.getElementById('vr-exit');
+/* Verbose run: describe a task, run it headless via `claude -p` in main,
+   reveal each critical-segment callout on a skippable timer. ClaudeWhat can
+   dig into any segment; visited segments persist across restarts. */
 
-// Queue + timer state for the reveal loop. `segments` is the arrival-ordered
-// list; `current` is the index showing now (-1 = none). `timer` is the 1s
-// countdown interval, `remaining` its seconds left. `runState` tracks the run.
+const vrPrompt = $('vr-prompt'), vrInput = $('vr-input'), vrGo = $('vr-go'),
+      vrCancelPrompt = $('vr-cancel-prompt'), vrHistory = $('vr-history');
+const vrPanel = $('vr-panel'), vrLabel = $('vr-label'),
+      vrSnippet = $('vr-snippet'), vrDetail = $('vr-detail'),
+      vrTimer = $('vr-timer'), vrNext = $('vr-next'),
+      vrClaudeWhat = $('vr-claudewhat'), vrExit = $('vr-exit');
+
+/* segments is arrival-ordered; current is the showing index (-1 = none);
+   timer is the 1s countdown interval with remaining seconds left. */
 const vrState = {
   runId: null, segments: [], current: -1,
   timer: null, remaining: 0, runState: 'idle'
 };
 
-function vrIsPanelOpen() { return !vrPanel.classList.contains('hidden'); }
+function vrIsPanelOpen() { return !isHidden(vrPanel); }
 
-// Stop the countdown without advancing.
 function vrClearTimer() {
   if (vrState.timer) { clearInterval(vrState.timer); vrState.timer = null; }
 }
 
-// Show a one-line status in the body instead of a segment (waiting/finished).
+// One-line status in the body instead of a segment (waiting/finished).
 function vrShowMessage(text) {
   vrClearTimer();
   vrTimer.textContent = '';
@@ -570,7 +496,7 @@ function vrShowMessage(text) {
   vrDetail.textContent = '';
 }
 
-// Render a segment and start its countdown from verboseTimerSec.
+// Render segment i and start its countdown.
 function vrShowSegment(i) {
   const seg = vrState.segments[i];
   if (!seg) return;
@@ -587,7 +513,7 @@ function vrShowSegment(i) {
   vrStartTimer();
 }
 
-// Begin (or restart) the 1s countdown for the current segment. At 0 we advance.
+// 1s countdown from verboseTimerSec; at 0 we advance.
 function vrStartTimer() {
   vrClearTimer();
   vrState.remaining = APPEARANCE.verboseTimerSec;
@@ -603,8 +529,7 @@ function vrStartTimer() {
   }, 1000);
 }
 
-// Move to the next segment if one exists; otherwise show waiting/finished
-// depending on whether the run is still producing output.
+// Next segment if one exists, else waiting/finished by run state.
 function vrAdvance() {
   vrClearTimer();
   const next = vrState.current + 1;
@@ -617,8 +542,8 @@ function vrAdvance() {
   }
 }
 
-// Build the history list: each run shows its task and segment labels. Visited
-// segments get the .vr-visited class. data-* attrs let markVisited find entries.
+/* History list: task + segment labels per run; visited get .vr-visited.
+   data-* attrs let markVisited find entries later. */
 function vrRenderHistory(runs) {
   vrHistory.textContent = '';
   if (!runs || !runs.length) return;
@@ -642,7 +567,6 @@ function vrRenderHistory(runs) {
   }
 }
 
-// Add the visited mark to a segment's history entry, if it is on screen.
 function vrMarkHistoryVisited(runId, index) {
   const entry = vrHistory.querySelector(
     '.vr-history-seg[data-run-id="' + runId + '"][data-index="' + index + '"]'
@@ -655,21 +579,20 @@ async function openVerbosePrompt() {
   hideMenu();
   let runs = [];
   try {
-    // verboseHistoryLoad resolves to the runs ARRAY (see contract / main.js),
-    // not a { runs } wrapper.
+    // verboseHistoryLoad resolves to the runs ARRAY, not a { runs } wrapper.
     const data = await veshell.verboseHistoryLoad();
     runs = Array.isArray(data) ? data : (data && data.runs) ? data.runs : [];
   } catch (_) { runs = []; }
   vrRenderHistory(runs);
-  vrPrompt.classList.remove('hidden');
+  show(vrPrompt);
   vrInput.focus();
 }
 
 function closeVerbosePrompt() {
-  vrPrompt.classList.add('hidden');
+  hide(vrPrompt);
 }
 
-// Submit the prompt: start the run, switch to the panel, reset queue state.
+// Start the run, switch to the panel, reset queue state.
 function vrSubmit() {
   const task = (vrInput.value || '').trim();
   if (!task) { showToast('Type a task first'); return; }
@@ -680,22 +603,22 @@ function vrSubmit() {
   vrState.remaining = 0;
   vrState.runState = 'running';
   vrClearTimer();
-  vrPanel.classList.remove('hidden');
+  show(vrPanel);
   vrShowMessage('Working. The first critical step will appear shortly.');
   veshell.verboseStart(task);
 }
 
-// Leave the panel: stop the run and the timer, refocus the terminal.
+// Leave the panel: stop run and timer, refocus terminal.
 function closeVerbosePanel() {
   vrClearTimer();
   try { veshell.verboseCancel(); } catch (_) {}
   vrState.runState = 'idle';
-  vrPanel.classList.add('hidden');
+  hide(vrPanel);
   term.focus();
 }
 
-// ClaudeWhat the current segment: pause, mark it visited, open ClaudeWhat
-// seeded with the segment text. On return, resume here and reset the timer.
+/* ClaudeWhat the current segment: pause, mark visited, dig in. On return,
+   resume here with a fresh timer. */
 function vrClaudeWhatCurrent() {
   const i = vrState.current;
   const seg = vrState.segments[i];
@@ -706,26 +629,23 @@ function vrClaudeWhatCurrent() {
     seg.visited = true;
     vrMarkHistoryVisited(vrState.runId, i);
   }
-  // When ClaudeWhat closes, come back to this segment with a fresh timer.
   cwState.onClose = () => { vrStartTimer(); };
   const parts = [seg.label, seg.snippet, seg.detail].filter((s) => s && s.length);
   openClaudeWhatForText(parts.join('\n\n'));
 }
 
-// Incoming segment from main. Push it; if nothing is showing yet, show it now.
+// Incoming segment: push it; reveal it now if nothing is showing.
 veshell.onVerboseSegment((seg) => {
   if (!seg) return;
   if (vrState.runId == null && seg.runId != null) vrState.runId = seg.runId;
   vrState.segments[seg.index] = {
     label: seg.label, snippet: seg.snippet, detail: seg.detail, visited: false
   };
-  // If the panel is parked on a waiting message (or showing nothing), reveal
-  // the first not-yet-shown segment.
   if (vrIsPanelOpen() && vrState.current < 0) {
     vrShowSegment(0);
   } else if (vrIsPanelOpen() && vrState.current >= 0 &&
              vrState.timer === null && vrState.runState === 'running') {
-    // We were parked on "Waiting for the next step." and a new one arrived.
+    // Parked on "Waiting for the next step." and a new one arrived.
     const next = vrState.current + 1;
     if (next < vrState.segments.length && next === seg.index) vrShowSegment(next);
   }
@@ -757,13 +677,12 @@ vrInput.addEventListener('keydown', (e) => {
   }
 });
 
-// Esc handling for the verbose surfaces. The ClaudeWhat capture-phase handler
-// already closes ClaudeWhat first when it is open, so only act here when it is
-// NOT open: close the prompt box, or exit the panel.
+/* Esc for the verbose surfaces. ClaudeWhat owns Esc while open (its
+   capture-phase handler fires first), so only act when it is not. */
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (isClaudeWhatOpen()) return; // ClaudeWhat owns Esc while it is up
-  if (!vrPrompt.classList.contains('hidden')) {
+  if (isClaudeWhatOpen()) return;
+  if (!isHidden(vrPrompt)) {
     e.preventDefault();
     closeVerbosePrompt();
     return;
@@ -774,8 +693,8 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// Debug/test hook, only exposed under the e2e flag, never in normal/prod use.
-// Lets the automated e2e driver reach the terminal and clipboard actions.
+/* Debug/test hook, e2e flag only, never in prod. The automated driver
+   reaches the terminal and clipboard actions through this. */
 if (veshell.e2e) {
   window.__veshell = {
     term,
@@ -795,19 +714,17 @@ if (veshell.e2e) {
       }
       return s;
     },
-    // ClaudeWhat hooks for the e2e driver.
     claudeWhatOpen: () => isClaudeWhatOpen(),
     openClaudeWhat: () => openClaudeWhat(),
     closeClaudeWhat: () => closeClaudeWhat(),
     cwBodyText: () => cwBody.textContent,
     cwContext: () => cwState.context,
     cwScrapeContext: () => scrapeContext(),
-    // Verbose run hooks for the e2e driver.
     openVerbosePrompt: () => openVerbosePrompt(),
     verboseStartTask: (t) => { vrInput.value = t; vrSubmit(); },
     vrSegments: () => vrState.segments,
     vrCurrent: () => vrState.current,
-    vrIsOpen: () => !vrPanel.classList.contains('hidden'),
+    vrIsOpen: () => !isHidden(vrPanel),
     vrMarkVisited: (i) => {
       const seg = vrState.segments[i];
       if (!seg) return;

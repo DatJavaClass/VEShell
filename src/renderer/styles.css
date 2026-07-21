@@ -12,9 +12,7 @@ html, body {
 
 #terminal {
   position: absolute;
-  /* Leave room for the 22px status bar at the bottom so xterm never sits under
-     it (safeFit measures this reduced height). */
-  inset: 0 0 22px 0;
+  inset: 0 0 22px 0;  /* 22px status-bar inset; safeFit measures this */
   padding: 6px 4px 4px 8px;
 }
 
@@ -27,7 +25,7 @@ html, body {
 }
 .xterm-viewport::-webkit-scrollbar-track { background: #1e1e1e; }
 
-/* ---- Context menu ---- */
+/* Context menu. */
 .context-menu {
   position: fixed;
   z-index: 1000;
@@ -67,9 +65,7 @@ html, body {
   background: #3c3c3c;
 }
 
-/* ---- ClaudeWhat panel ----
-   A full-window overlay that "pivots" away from the terminal to show a
-   contextual explanation, then returns. Terminal is untouched underneath. */
+/* ClaudeWhat panel: full-window overlay, terminal untouched underneath. */
 .cw-panel {
   position: fixed;
   inset: 0;
@@ -137,10 +133,7 @@ html, body {
 }
 .cw-btn-primary:hover { background: #1177bb; }
 
-/* ---- Status bar ----
-   Slim bar pinned to the bottom. Above the terminal but below the panels
-   (1160) and the session overlay (1200), so those full-window surfaces cover
-   it. The right-aligned hint alternates via a renderer timer. */
+/* Status bar: below the panels (1160+) and the overlay (1200). */
 .statusbar {
   position: fixed;
   left: 0;
@@ -161,7 +154,7 @@ html, body {
 }
 .status-hint { white-space: nowrap; }
 
-/* ---- Toast ---- */
+/* Toast. */
 .toast {
   position: fixed;
   bottom: 18px;
@@ -181,7 +174,7 @@ html, body {
 }
 .toast.fade { opacity: 0; }
 
-/* ---- Overlay ---- */
+/* Session-ended overlay. */
 .overlay {
   position: fixed;
   inset: 0;
@@ -212,9 +205,7 @@ html, body {
 #overlay-restart:hover { background: #1177bb; }
 .overlay-hint { margin-top: 12px; font-size: 11px; color: #9a9a9a; }
 
-/* ---- Verbose run: prompt overlay ----
-   A centered modal box over a dimmed backdrop, like .overlay. Sits below the
-   ClaudeWhat panel (1180) and the session overlay (1200). */
+/* Verbose prompt: centered modal, below ClaudeWhat (1180) and overlay (1200). */
 .vr-prompt {
   position: fixed;
   inset: 0;
@@ -283,9 +274,7 @@ html, body {
 .vr-history::-webkit-scrollbar-thumb { background: #4a4a4a; border-radius: 6px; }
 .vr-history::-webkit-scrollbar-track { background: #2b2b2b; }
 
-/* ---- Verbose run: reveal panel ----
-   A full-window column, like .cw-panel. Same 1160 layer as the prompt so
-   ClaudeWhat (1180) opens on top of a revealed segment. */
+/* Verbose panel: same 1160 layer; ClaudeWhat (1180) opens on top. */
 .vr-panel {
   position: fixed;
   inset: 0;
@@ -330,7 +319,7 @@ html, body {
   margin-bottom: 14px;
   color: #e6e6e6;
 }
-/* Snippet: monospace block, hidden when empty (no text content). */
+/* Snippet: hidden when empty. */
 .vr-snippet {
   margin: 0 0 14px;
   padding: 12px 14px;
@@ -359,8 +348,7 @@ html, body {
   border-top: 1px solid #3c3c3c;
   background: #181818;
 }
-/* Visited segment: not color alone (some students are colorblind), so a
-   leading check plus a muted green. */
+/* Visited: check mark plus green, never color alone. */
 .vr-visited { color: #6fbf8b; }
 .vr-visited::before { content: '\2713  '; }
 

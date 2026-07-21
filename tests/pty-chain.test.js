@@ -1,8 +1,8 @@
 'use strict';
 
-// Headless test of the VEShell launch chain: node-pty (ConPTY) -> powershell -> claude.
-// Run under Electron's ABI:  ELECTRON_RUN_AS_NODE=1 electron tests/pty-chain.test.js
-// node-pty is compiled against Electron, so plain `node` cannot load it.
+/* Headless test of the VEShell launch chain: node-pty (ConPTY) -> powershell -> claude.
+   Run under Electron's ABI: ELECTRON_RUN_AS_NODE=1 electron tests/pty-chain.test.js
+   node-pty is compiled against Electron, so plain `node` cannot load it. */
 
 const path = require('path');
 const os = require('os');
@@ -29,9 +29,7 @@ function stripAnsi(s) {
     .replace(/[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]/g, '');
 }
 
-// ---------------------------------------------------------------------------
-// Test A: PowerShell layer — spawn powershell, run an expression, see the result.
-// ---------------------------------------------------------------------------
+// Test A: spawn powershell, run an expression, see the result.
 function testPowerShell() {
   return new Promise((resolve) => {
     let buf = '';
@@ -58,7 +56,7 @@ function testPowerShell() {
     });
     proc.onExit(() => { if (!done) finish(false, 'powershell exited early'); });
 
-    // Give the prompt a beat, then send an expression whose output is a marker.
+    // Give the prompt a beat, then send a marker expression.
     setTimeout(() => {
       proc.write("'VESHELL_MARKER_' + (2+2)\r");
     }, 800);
@@ -68,9 +66,7 @@ function testPowerShell() {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Test B: resize — ConPTY should accept a resize without throwing/dying.
-// ---------------------------------------------------------------------------
+// Test B: ConPTY accepts resizes without throwing or dying.
 function testResize() {
   return new Promise((resolve) => {
     let done = false;
@@ -98,10 +94,7 @@ function testResize() {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Test C: Claude layer — the real chain: powershell -NoExit -Command claude.
-// We only need to confirm claude is invoked and produces output.
-// ---------------------------------------------------------------------------
+// Test C: real chain powershell -NoExit -Command claude; confirm it runs.
 function testClaudeChain() {
   return new Promise((resolve) => {
     let buf = '';
@@ -138,8 +131,7 @@ function testClaudeChain() {
 
     setTimeout(() => {
       if (!done) {
-        // Not necessarily a failure: claude may be waiting at a prompt with a
-        // full-screen TUI that our keyword list missed. Report what we saw.
+        // Not a failure: claude may sit in a full-screen TUI our keywords missed.
         const clean = stripAnsi(buf);
         const ok = clean.trim().length > 0;
         finish(ok, ok

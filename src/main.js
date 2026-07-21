@@ -1,24 +1,14 @@
 'use strict';
 
-// ===========================================================================
-// VEShell main process.
-// Owns the app/window lifecycle, spawns the ConPTY-backed PowerShell->Claude
-// session, and answers IPC from the sandboxed renderer (clipboard, ClaudeWhat,
-// session restart). The renderer can't touch Node/OS APIs directly, so anything
-// privileged (spawning processes, clipboard, file reads) happens here.
-//
-// The ClaudeWhat and Verbose-run subsystems live in their own modules and are
-// wired in with a one-line register() call each (see below), so adding a future
-// feature is the same shape: a new module + one register line.
-// ===========================================================================
+/* VEShell main process: app/window/pty lifecycle, clipboard, and IPC for the
+   sandboxed renderer. Feature modules wire in via one register() line each. */
 
 const { app, BrowserWindow, ipcMain, clipboard, Menu, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-// node-pty is a native module; it lives unpacked from the asar (see build.asarUnpack).
-const pty = require('node-pty');
+const pty = require('node-pty'); // native; unpacked from asar (build.asarUnpack)
 
 const { loadConfig } = require('./config');
 const claudewhat = require('./claudewhat');
@@ -26,31 +16,21 @@ const verbose = require('./verbose');
 
 const config = loadConfig(app);
 
-// Hard gate: the e2e/debug hooks must never be reachable in a packaged build,
-// even if VESHELL_E2E leaked into the environment. Clearing it here (before any
-// window/renderer is spawned) keeps both the main hook and preload's flag off.
+// Hard gate: e2e/debug hooks must never survive into a packaged build.
 if (app.isPackaged) delete process.env.VESHELL_E2E;
 
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.ico');
 
-let mainWindow = null;
-let ptyProc = null;
+let mainWindow = null, ptyProc = null;
 
-// Buffer pty output that arrives before the renderer signals it is ready,
-// then flush it so no early output (the PowerShell prompt / Claude banner) is lost.
-let rendererReady = false;
-let outputBuffer = [];
+// Early pty output buffers here until the renderer says ready.
+let rendererReady = false, outputBuffer = [];
 
-// ---------------------------------------------------------------------------
-// PTY lifecycle
-// ---------------------------------------------------------------------------
-// Start the real shell behind a ConPTY at the given grid size and wire its
-// output back to the renderer. Returns the process, or null on failure (in
-// which case the renderer is told via a synthetic pty:exit so it can show the
-// session-ended overlay instead of a blank window).
+// PTY lifecycle.
+
+/* Spawn the shell behind a ConPTY and wire output to the renderer. Returns
+   null on failure, after a synthetic pty:exit so the overlay shows. */
 function spawnPty(cols, rows) {
-  // Resolve and validate the working directory; a stale config cwd must not
-  // take down the spawn.
   let cwd = config.cwd || process.env.USERPROFILE || os.homedir();
   try {
     if (!fs.existsSync(cwd)) cwd = process.env.USERPROFILE || os.homedir();
@@ -68,8 +48,6 @@ function spawnPty(cols, rows) {
       env: Object.assign({}, process.env, { VESHELL: '1', TERM: 'xterm-256color' })
     });
   } catch (err) {
-    // Surface the failure to the renderer (shows the session-ended overlay)
-    // instead of leaving a silent blank window.
     console.error('VEShell: failed to spawn shell:', err);
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('pty:exit', {
@@ -91,9 +69,7 @@ function spawnPty(cols, rows) {
   });
 
   proc.onExit(({ exitCode, signal }) => {
-    // Only act if this is still the current session. An old pty dying after a
-    // restart must not null the new one or flash the overlay over it.
-    if (ptyProc !== proc) return;
+    if (ptyProc !== proc) return; // a stale pty must not clobber a restart
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('pty:exit', { exitCode, signal });
     }
@@ -103,8 +79,7 @@ function spawnPty(cols, rows) {
   return proc;
 }
 
-// Replay any pty output that arrived before the renderer was ready, so the
-// PowerShell prompt / Claude banner is never lost on a slow first paint.
+// Replay pre-ready output so the first prompt is never lost.
 function flushBuffer() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   for (const chunk of outputBuffer) {
@@ -113,9 +88,8 @@ function flushBuffer() {
   outputBuffer = [];
 }
 
-// ---------------------------------------------------------------------------
-// Window
-// ---------------------------------------------------------------------------
+// Window.
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1100,
@@ -133,17 +107,15 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: false,
       spellcheck: false,
-      // Keep the terminal live (and timers un-throttled) when unfocused.
-      backgroundThrottling: false
+      backgroundThrottling: false // terminal stays live when unfocused
     }
   });
 
-  // No application menu. Copy/paste is handled in-terminal, not via a menu bar.
-  Menu.setApplicationMenu(null);
+  Menu.setApplicationMenu(null); // copy/paste lives in-terminal, no menu bar
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
-  // Open external links (xterm web-links addon) in the system browser.
+  // xterm web links open in the system browser.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
@@ -157,8 +129,7 @@ function createWindow() {
     }
   });
 
-  // Automated end-to-end driver hook. Dev-only: the tests/ dir is excluded from
-  // the packaged app, so never run (or exit) on a stray VESHELL_E2E in prod.
+  // E2E driver hook. Dev only; tests/ never ships in the packaged app.
   if (process.env.VESHELL_E2E && !app.isPackaged) {
     mainWindow.webContents.once('did-finish-load', () => {
       try {
@@ -173,11 +144,9 @@ function createWindow() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// IPC  (renderer -> main; the renderer's only path to anything privileged)
-// ---------------------------------------------------------------------------
-// Renderer signals it (and xterm) are ready: spawn the session at the reported
-// grid size, then flush any buffered early output.
+// IPC: the renderer's only path to anything privileged.
+
+// Renderer ready: spawn at its grid size, then flush buffered output.
 ipcMain.on('renderer:ready', (event, dims) => {
   rendererReady = true;
   if (!ptyProc) {
@@ -196,8 +165,7 @@ ipcMain.on('pty:resize', (event, { cols, rows }) => {
   }
 });
 
-// Clipboard is routed through the main process for maximum reliability on
-// Windows (avoids renderer focus/permission quirks of the async clipboard API).
+// Clipboard routes through main; renderer clipboard is flaky on Windows.
 ipcMain.handle('clip:write', (event, text) => {
   if (typeof text !== 'string') return false;
   clipboard.writeText(text);
@@ -206,27 +174,22 @@ ipcMain.handle('clip:write', (event, text) => {
 
 ipcMain.handle('clip:read', () => clipboard.readText());
 
-// Feature subsystems: each owns its own IPC channels. ClaudeWhat is self
-// contained (invoke-based); Verbose pushes events to the window so it gets the
-// accessors it needs.
+// Feature subsystems each own their IPC channels.
 claudewhat.register(ipcMain);
 verbose.register(ipcMain, { getMainWindow: () => mainWindow, app, config });
 
-// Restart the PowerShell+Claude session in the existing window. The renderer
-// passes the current grid dimensions so the new pty starts at the right size.
+// Restart in place, at the renderer's current grid size.
 ipcMain.on('session:restart', (event, dims) => {
   if (ptyProc) {
     const old = ptyProc;
-    ptyProc = null;            // detach first so old.onExit no-ops (ptyProc !== old)
+    ptyProc = null; // detach first so old.onExit no-ops
     try { old.kill(); } catch (_) {}
   }
   ptyProc = spawnPty(dims && dims.cols, dims && dims.rows);
 });
 
-// ---------------------------------------------------------------------------
-// App lifecycle
-// ---------------------------------------------------------------------------
-// Single instance: a second launch focuses the existing window.
+// App lifecycle. Single instance: a second launch focuses the first.
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();

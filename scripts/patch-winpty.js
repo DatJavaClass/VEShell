@@ -1,15 +1,9 @@
 'use strict';
 
-// node-pty bundles winpty (the legacy, pre-ConPTY Windows backend). Its gyp
-// build computes a version header at configure time by shelling out to two
-// batch files (GetCommitHash.bat / UpdateGenVersion.bat) via gyp's `<!()`
-// command expansion. Modern gyp spawns those with a cwd that breaks the
-// relative `cd shared && ...bat` calls, failing the whole build — even though
-// VEShell only ever uses ConPTY at runtime.
-//
-// This makes winpty's version stamping fully static: pre-generate GenVersion.h
-// and replace the dynamic batch invocations in winpty.gyp with literals. No
-// behavioral change to the produced binary. Idempotent; safe to re-run.
+/* node-pty bundles winpty, whose gyp build stamps a version header via batch
+   files; modern gyp's cwd breaks those calls and fails the build (VEShell only
+   uses ConPTY). Make stamping static: pre-generate GenVersion.h, use literals.
+   No change to the produced binary. Idempotent, safe to re-run. */
 
 const fs = require('fs');
 const path = require('path');

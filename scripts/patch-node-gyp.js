@@ -1,10 +1,8 @@
 'use strict';
 
-// node-gyp's Visual Studio detector only knows VS major versions 15/16/17
-// (2017/2019/2022). Visual Studio 18 (2026) falls through and is rejected as
-// an "unknown version", even though its toolchain (MSBuild\Current + the v143
-// toolset) is fully compatible. This script teaches the detector to treat any
-// VS major >= 18 as 2022-compatible. It is idempotent and safe to re-run.
+/* node-gyp's VS detector only knows majors 15/16/17. VS 18 (2026) is rejected
+   as unknown, though its v143 toolchain is 2022-compatible. Teach it to treat
+   any VS major >= 18 as 2022. Idempotent, safe to re-run. */
 
 const fs = require('fs');
 const path = require('path');

@@ -1,61 +1,43 @@
 'use strict';
 
-// ===========================================================================
-// Preload bridge. Runs with Node access but in an isolated world, and exposes a
-// small, explicit `window.veshell` API to the renderer over IPC. This is the
-// only surface the (sandboxed, no-Node) renderer can use to reach the main
-// process. Keep it minimal; never expose raw ipcRenderer or Node globals.
-// ===========================================================================
+/* Preload bridge: exposes a minimal window.veshell API to the sandboxed
+   renderer over IPC. Never leak raw ipcRenderer or Node globals. */
 
 const { contextBridge, ipcRenderer } = require('electron');
 
-// Minimal, explicit API surface exposed to the renderer. No Node globals leak
-// through (contextIsolation is on); the renderer can only do these things.
-contextBridge.exposeInMainWorld('veshell', {
-  // Dev/e2e flag, gates the renderer's debug hook so it never ships in prod.
-  e2e: !!process.env.VESHELL_E2E,
+// removeAllListeners first so a page reload can't stack duplicate handlers.
+function subscribe(channel, cb) {
+  ipcRenderer.removeAllListeners(channel);
+  ipcRenderer.on(channel, (_e, arg) => cb(arg));
+}
 
-  // Tell main the renderer (and xterm) is ready, with initial dimensions.
+contextBridge.exposeInMainWorld('veshell', {
+  e2e: !!process.env.VESHELL_E2E, // gates debug hook, never in prod
   ready: (dims) => ipcRenderer.send('renderer:ready', dims),
 
-  // pty I/O. removeAllListeners first so a page reload can't stack duplicate
-  // handlers (which would double every chunk of output).
-  onData: (cb) => {
-    ipcRenderer.removeAllListeners('pty:data');
-    ipcRenderer.on('pty:data', (_e, data) => cb(data));
-  },
-  onExit: (cb) => {
-    ipcRenderer.removeAllListeners('pty:exit');
-    ipcRenderer.on('pty:exit', (_e, info) => cb(info));
-  },
+  // pty I/O
+  onData: (cb) => subscribe('pty:data', cb),
+  onExit: (cb) => subscribe('pty:exit', cb),
   sendInput: (data) => ipcRenderer.send('pty:input', data),
   resize: (cols, rows) => ipcRenderer.send('pty:resize', { cols, rows }),
 
-  // clipboard (routed through main process)
+  // clipboard, routed through main
   copy: (text) => ipcRenderer.invoke('clip:write', text),
   paste: () => ipcRenderer.invoke('clip:read'),
 
-  // ClaudeWhat: explain a selected snippet in the context of the terminal.
-  // Returns { ok, text } or { ok:false, error }.
+  // ClaudeWhat: explain a selection. Returns { ok, text } or { ok:false, error }.
   claudeWhat: (instruction, context) =>
     ipcRenderer.invoke('claudewhat:explain', { instruction, context }),
   claudeWhatCancel: () => ipcRenderer.send('claudewhat:cancel'),
 
-  // Verbose run: headless `claude -p` task that streams critical-segment
-  // callouts back to the renderer as they arrive.
+  // Verbose: headless claude -p streaming critical-segment callouts.
   verboseStart: (task) => ipcRenderer.send('verbose:start', task),
   verboseCancel: () => ipcRenderer.send('verbose:cancel'),
   verboseMarkVisited: (runId, index) =>
     ipcRenderer.send('verbose:markVisited', { runId, index }),
   verboseHistoryLoad: () => ipcRenderer.invoke('verbose:historyLoad'),
-  onVerboseSegment: (cb) => {
-    ipcRenderer.removeAllListeners('verbose:segment');
-    ipcRenderer.on('verbose:segment', (_e, seg) => cb(seg));
-  },
-  onVerboseStatus: (cb) => {
-    ipcRenderer.removeAllListeners('verbose:status');
-    ipcRenderer.on('verbose:status', (_e, s) => cb(s));
-  },
+  onVerboseSegment: (cb) => subscribe('verbose:segment', cb),
+  onVerboseStatus: (cb) => subscribe('verbose:status', cb),
 
   // session
   restart: (dims) => ipcRenderer.send('session:restart', dims)

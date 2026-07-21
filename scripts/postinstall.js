@@ -1,8 +1,7 @@
 'use strict';
 
-// Applies the build patches and rebuilds node-pty against Electron. Guarded so
-// that non-Windows clones or environments without the VS C++ toolchain don't
-// hard-fail on `npm install`. Set VESHELL_SKIP_REBUILD=1 to skip entirely.
+/* Applies build patches, rebuilds node-pty against Electron. Guarded so a
+   non-Windows or toolchain-less clone won't hard-fail npm install (skip: VESHELL_SKIP_REBUILD=1). */
 
 const { execSync } = require('child_process');
 

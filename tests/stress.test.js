@@ -1,9 +1,8 @@
 'use strict';
 
-// Headless stability/stress tests for the pty layer that VEShell depends on.
-// Run:  ELECTRON_RUN_AS_NODE=1 electron tests/stress.test.js
-// Exercises resize storms, output floods, rapid spawn/kill cycles, very long
-// lines, and unicode round-trips — the things that destabilize a terminal.
+/* Headless stability/stress tests for the pty layer VEShell depends on.
+   Run: ELECTRON_RUN_AS_NODE=1 electron tests/stress.test.js
+   Resize storms, output floods, spawn/kill churn, long lines, unicode. */
 
 const os = require('os');
 let pty;
@@ -24,7 +23,7 @@ function spawn(cols = 100, rows = 30) {
   return pty.spawn(PS, ARGS, { name: 'xterm-256color', cols, rows, cwd: CWD, env: process.env });
 }
 
-// 1. Resize storm — 200 rapid resizes must not crash or kill the session.
+// 1. Resize storm: 200 rapid resizes must not crash or kill the session.
 async function resizeStorm() {
   return new Promise((resolve) => {
     const p = spawn();
@@ -50,7 +49,7 @@ async function resizeStorm() {
   });
 }
 
-// 2. Output flood — 30k lines should stream through without loss of the tail.
+// 2. Output flood: 30k lines stream through without losing the tail.
 async function outputFlood() {
   return new Promise((resolve) => {
     const p = spawn();
@@ -84,7 +83,7 @@ async function outputFlood() {
   });
 }
 
-// 3. Spawn/kill churn — 25 rapid lifecycles must not throw or leak handles.
+// 3. Spawn/kill churn: 25 rapid lifecycles must not throw or leak handles.
 async function spawnKillChurn() {
   let okCount = 0;
   let threw = null;
